@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1420" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ironvale" />
+  <meta name="description" content="Medieval 2D platformer — run, jump, and slash your way through Ironvale." />
+  <title>Ironvale</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="cv" width="390" height="700"></canvas>
+    <div id="versionTag"></div>
+
+    <div class="screen" data-screen="menu" id="screenMenu">
+      <div class="menu-card">
+        <div class="logo-wrap">
+          <img class="logo-icon" src="assets/sprites/player/logo.png" alt="" width="96" height="108" />
+        </div>
+        <h1><span class="c1">Iron</span><span class="c2">vale</span></h1>
+        <p class="tagline">Run · jump · slash · survive</p>
+        <p class="credit-line">Knight art: GameArt2D free sprite · Ironvale world art</p>
+
+        <div class="stats">
+          <div><span class="lbl">Best</span><strong id="statBest">0</strong></div>
+          <div><span class="lbl">Games</span><strong id="statGames">0</strong></div>
+          <div><span class="lbl">Wave</span><strong id="statWave">0</strong></div>
+        </div>
+
+        <button id="btnPlay" class="primary">▶  Play</button>
+        <button id="btnHow" class="secondary">How to play</button>
+        <button id="muteBtn" class="ghost">🔊 Sound on</button>
+
+        <div id="howPanel" class="how hidden">
+          <ol>
+            <li><b>Left stick / A D</b> — run. <b>JUMP</b> or Space / W — leap platforms.</li>
+            <li><b>ATK</b> or J / F / Shift — sword slash. Defeat foes for gold XP.</li>
+            <li>Level up and pick blessings. Survive escalating waves and bosses.</li>
+            <li>Platforms are always single-jump reachable — no double jump needed.</li>
+          </ol>
+        </div>
+        <p id="versionMenu" class="ver"></p>
+      </div>
+    </div>
+
+    <button id="btnPauseMenu" class="icon-btn play-chrome hidden" type="button" title="Menu">☰</button>
+    <p id="playHint" class="hint play-chrome hidden">Left: run · JUMP · ATK · 1–3 pick upgrades</p>
+
+    <div class="screen hidden" data-screen="over" id="screenOver">
+      <div class="menu-card">
+        <h2>Fallen</h2>
+        <p id="overReason" class="tagline">Fallen in battle!</p>
+        <p id="newBest" class="new-best hidden">🏆 New best score!</p>
+        <div class="stats tall">
+          <div><span class="lbl">Score</span><strong id="overScore">0</strong></div>
+          <div><span class="lbl">Best</span><strong id="overBest">0</strong></div>
+          <div><span class="lbl">Wave</span><strong id="overWave">0</strong></div>
+          <div><span class="lbl">Kills</span><strong id="overKills">0</strong></div>
+        </div>
+        <button id="btnRetry" class="primary">↻  Play again</button>
+        <button id="btnMenu" class="secondary">Main menu</button>
+        <p id="versionOver" class="ver"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
