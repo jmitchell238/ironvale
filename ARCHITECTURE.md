@@ -2,7 +2,7 @@
 
 Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
 
-**Version:** 1.3.000 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 1.3.100 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -13,7 +13,7 @@ Clean, layered architecture for a medieval action-platformer (Castlevania-style 
 | **Pitch** | Knight platformer: run, jump, sword combat through Ironvale. |
 | **Product direction** | Discrete **levels** → end boss → clear campaign; persistent RPG stats **between levels**. |
 | **Current loop** | Campaign stages (level select → explore encounters → end gate → boss → clear/fail). |
-| **Feel targets** | Long sword hitbox, jump attack, ledge-safe enemies (P0 done). |
+| **Feel targets** | Long sword hitbox, jump attack, ledge-safe enemies (P0). Telegraphed enemy melee (bandit/ogre/boss); slime contact-only. |
 
 ---
 
@@ -185,6 +185,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **P2 L2 Ruined Road** | Done (v1.2.200) | Tighter platforms, skeletons, skeleton champion |
 | **P2 L3 Iron Gate** | Done (v1.2.300) | Ogres + war-chief telegraphed slams, campaign clear |
 | **P3 RPG** | Done (v1.3.000) | Persistent XP + attrs between levels only |
+| **Polish melee telegraphs** | Done (v1.3.100) | Bandit/skeleton/ogre/boss windups; slime contact-only |
 | **P4 Scale** | Planned | ~10 levels |
 
 ---

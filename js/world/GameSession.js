@@ -10,14 +10,14 @@
 
 import {
   PLAYER, PLAYER_BODY, PLAYER_MOVE, PLAYER_SWORD, ENEMIES, ENEMY_AI, CAM, W, GROUND_Y,
-  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, enemyIsBoss, BOSS_SLAM,
+  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, enemyIsBoss, getEnemyMeleeCfg,
 } from '../config/index.js';
 import { clamp, circleHit, dist, rand, lerp } from '../core/math.js';
 import {
   beginMeleeAttack, resolveMeleeHits, hasMeleePriority, getAttackBox,
 } from '../domain/combat.js';
 import {
-  aiUpdateEnemy, aiPatrolBounds, aiCanStandAt, enemyUsesTelegraphedSlam,
+  aiUpdateEnemy, aiPatrolBounds, aiCanStandAt, enemyUsesTelegraphedAttack,
 } from '../domain/enemyAi.js';
 import { makePlatform, canReachPlatform, platformsChainReachable } from '../domain/platforms.js';
 import { makePlayer, playerCx, playerCy, integratePlayerMovement } from '../domain/player.js';
@@ -374,6 +374,15 @@ export class GameSession {
     }
     const bounds = aiPatrolBounds(x, homePl, ENEMY_AI);
     const bossFlag = !!opts.isBoss || enemyIsBoss(type) || !!def.isBoss;
+    const hasMelee = !!(def.hasMelee || def.hasSlam || opts.hasMelee || opts.hasSlam
+      || getEnemyMeleeCfg(type));
+    const hasSlam = !!(def.hasSlam || opts.hasSlam);
+    const meleeCfg = getEnemyMeleeCfg(type);
+    // Stagger first attack so packs don't all swing together
+    let slamCd = 0;
+    if (hasMelee) {
+      slamCd = bossFlag ? 0.75 : 0.25 + Math.random() * 0.45;
+    }
     const enemy = {
       type, x, y, w: def.w, h: def.h,
       hp: def.hp * scale, maxHp: def.hp * scale,
@@ -389,10 +398,12 @@ export class GameSession {
       patrolMin: bounds.patrolMin, patrolMax: bounds.patrolMax,
       hitStun: 0,
       isBoss: bossFlag,
-      hasSlam: !!(def.hasSlam || opts.hasSlam),
+      hasMelee,
+      hasSlam,
+      meleeCfg: meleeCfg || null,
       slamState: 'idle',
       slamT: 0,
-      slamCd: bossFlag && (def.hasSlam || opts.hasSlam) ? 0.8 : 0,
+      slamCd,
       slamHitDone: false,
     };
     this.enemies.push(enemy);
@@ -544,7 +555,7 @@ export class GameSession {
     return aiUpdateEnemy(e, dt, this.player, this.platforms, ENEMY_AI, {
       gravity: PLAYER_MOVE.gravity,
       maxFall: PLAYER_MOVE.maxFall,
-    }, BOSS_SLAM);
+    }, e.meleeCfg || getEnemyMeleeCfg(e));
   }
 
   /** Encounter triggers + boss gate. */
@@ -620,14 +631,16 @@ export class GameSession {
       }
       if (slamHit && slamHit.hit) {
         this.hurtPlayer(slamHit.damage);
-        this.player.vx = (slamHit.dir || 1) * slamHit.knockback * 0.55;
-        this.player.vy = -220;
+        const kbScale = e.hasSlam ? 0.55 : 0.42;
+        this.player.vx = (slamHit.dir || 1) * slamHit.knockback * kbScale;
+        this.player.vy = e.hasSlam ? -220 : -160;
         this.player.onGround = false;
-        this.shake = Math.max(this.shake, 2.8);
+        this.shake = Math.max(this.shake, e.hasSlam ? 2.8 : 1.8);
         continue;
       }
-      // Slam bosses: damage only from telegraphed slam (not contact-only).
-      if (enemyUsesTelegraphedSlam(e)) continue;
+      // Melee enemies: damage only from telegraphed attack (not contact-only).
+      // Slimes and other contact fodder still use body overlap.
+      if (enemyUsesTelegraphedAttack(e)) continue;
       if (circleHit(pcx, pcy, Math.min(this.player.w, this.player.h) * 0.32, e.x, e.y - e.h / 2, e.w * 0.35)) {
         this.hurtPlayer(e.damage);
         this.player.vx += (this.player.x < e.x ? -1 : 1) * 100;

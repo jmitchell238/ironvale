@@ -4,7 +4,7 @@
  */
 
 import {
-  W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY,
+  W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, getEnemyMeleeCfg,
 } from '../config/index.js';
 import { clamp } from '../core/math.js';
 import { getAttackBox, combatAttackDuration } from '../domain/combat.js';
@@ -167,28 +167,45 @@ export function drawEnemy(ctx, e, cam, t) {
       : e.type === 'ogre' ? 1.35
       : 1.3);
 
-  // Slam telegraph: ground warning + body flash during windup/active
+  // Melee telegraph: ground / strike warning during windup/active
   if (e.slamState === 'windup' || e.slamState === 'slam') {
     const face = e.facing || -1;
-    const range = 78;
-    const warnX = sx + face * (e.w * 0.2 + range * 0.45);
+    const mcfg = e.meleeCfg || getEnemyMeleeCfg(e);
+    const range = mcfg && mcfg.range != null ? mcfg.range : 48;
+    const heavy = !!(mcfg && mcfg.heavy) || !!e.hasSlam;
+    const warnX = sx + face * (e.w * 0.25 + range * 0.45);
     const pulse = e.slamState === 'windup'
-      ? 0.35 + 0.35 * Math.sin(t * 18)
+      ? 0.35 + 0.35 * Math.sin(t * (heavy ? 18 : 22))
       : 0.7;
+    const elW = range * (heavy ? 0.55 : 0.42);
+    const elH = heavy ? 7 : 5;
     ctx.save();
     ctx.globalAlpha = pulse;
-    ctx.fillStyle = e.slamState === 'slam' ? 'rgba(220,40,30,0.55)' : 'rgba(255,90,40,0.4)';
+    ctx.fillStyle = e.slamState === 'slam'
+      ? (heavy ? 'rgba(220,40,30,0.55)' : 'rgba(230,70,50,0.45)')
+      : (heavy ? 'rgba(255,90,40,0.4)' : 'rgba(255,160,60,0.38)');
     ctx.beginPath();
-    ctx.ellipse(warnX, e.y - 2, range * 0.55, 7, 0, 0, Math.PI * 2);
+    ctx.ellipse(warnX, e.y - 2, elW, elH, 0, 0, Math.PI * 2);
     ctx.fill();
     if (e.slamState === 'windup') {
-      ctx.strokeStyle = 'rgba(255,200,80,0.85)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = heavy ? 'rgba(255,200,80,0.85)' : 'rgba(255,220,120,0.9)';
+      ctx.lineWidth = heavy ? 2 : 1.5;
+      ctx.setLineDash(heavy ? [6, 4] : [4, 3]);
       ctx.beginPath();
-      ctx.ellipse(warnX, e.y - 2, range * 0.55, 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(warnX, e.y - 2, elW, elH, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+      // Light slash: short arc cue in facing direction
+      if (!heavy) {
+        ctx.strokeStyle = 'rgba(255,230,160,0.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const arcR = range * 0.55;
+        const base = sx + face * (e.w * 0.15);
+        const ay = e.y - e.h * 0.45;
+        ctx.arc(base, ay, arcR, face > 0 ? -0.9 : Math.PI - 0.2, face > 0 ? 0.2 : Math.PI + 0.9);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }

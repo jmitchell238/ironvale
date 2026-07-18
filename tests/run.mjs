@@ -46,7 +46,8 @@ const {
 } = combat;
 
 const {
-  aiCanStandAt, aiUpdateEnemy, tickEnemySlam, enemyUsesTelegraphedSlam, enemySlamBusy,
+  aiCanStandAt, aiUpdateEnemy, tickEnemySlam, enemyUsesTelegraphedSlam,
+  enemyUsesTelegraphedAttack, enemySlamBusy,
 } = enemyAi;
 const { makePlatform, platformsChainReachable, canReachPlatform } = platforms;
 
@@ -404,11 +405,12 @@ section('pure telegraphed slam (war-chief)');
   const player = { x: 200, y: GROUND_Y, w: 28, h: 48 };
   const e = {
     type: 'ogre_warchief', x: 200, y: GROUND_Y, w: 54, h: 56,
-    damage: ENEMIES.ogre_warchief.damage, hasSlam: true,
+    damage: ENEMIES.ogre_warchief.damage, hasSlam: true, hasMelee: true,
     slamState: 'idle', slamT: 0, slamCd: 0, slamHitDone: false,
     hitStun: 0, facing: 1,
   };
   assert(enemyUsesTelegraphedSlam(e), 'uses slam');
+  assert(enemyUsesTelegraphedAttack(e), 'uses telegraphed attack');
   // Enter windup when in range
   let hit = tickEnemySlam(e, 0.016, player, BOSS_SLAM);
   assertEq(e.slamState, 'windup', 'windup start');
@@ -429,6 +431,70 @@ section('pure telegraphed slam (war-chief)');
   tickEnemySlam(e, BOSS_SLAM.recover + 0.05, player, BOSS_SLAM);
   assertEq(e.slamState, 'idle', 'back idle');
   assert(e.slamCd > 0, 'cooldown');
+}
+
+section('telegraphed melee (bandit/ogre; slime contact)');
+{
+  const { ENEMY_MELEE, ENEMIES, getEnemyMeleeCfg } = config;
+  assert(getEnemyMeleeCfg('bandit'), 'bandit melee cfg');
+  assert(getEnemyMeleeCfg('ogre'), 'ogre melee cfg');
+  assert(getEnemyMeleeCfg('bandit_captain'), 'captain melee cfg');
+  assert(getEnemyMeleeCfg('skeleton_champion'), 'champion melee cfg');
+  assert(!getEnemyMeleeCfg('slime'), 'slime has no melee cfg');
+  assert(ENEMIES.bandit.hasMelee && ENEMIES.ogre.hasMelee, 'flags');
+  assert(!ENEMIES.slime.hasMelee, 'slime no hasMelee');
+  assert(ENEMY_MELEE.ogre.windup > ENEMY_MELEE.bandit.windup, 'ogre slower windup');
+  assert(ENEMY_MELEE.ogre_warchief.windup >= ENEMY_MELEE.ogre.windup, 'boss heaviest');
+
+  const player = { x: 100, y: GROUND_Y, w: 28, h: 48 };
+  const bandit = {
+    type: 'bandit', x: 100, y: GROUND_Y, w: 28, h: 42,
+    damage: ENEMIES.bandit.damage, hasMelee: true,
+    slamState: 'idle', slamT: 0, slamCd: 0, slamHitDone: false,
+    hitStun: 0, facing: 1,
+  };
+  assert(enemyUsesTelegraphedAttack(bandit), 'bandit telegraphs');
+  let hit = tickEnemySlam(bandit, 0.016, player);
+  assertEq(bandit.slamState, 'windup', 'bandit windup');
+  assert(!hit, 'no dmg in windup');
+  tickEnemySlam(bandit, ENEMY_MELEE.bandit.windup + 0.01, player);
+  assertEq(bandit.slamState, 'slam', 'bandit active');
+  hit = tickEnemySlam(bandit, 0.02, player);
+  assert(hit && hit.hit, 'bandit swing hits');
+  assertEq(hit.damage, ENEMIES.bandit.damage, 'bandit dmgMul 1.0');
+
+  const slime = {
+    type: 'slime', x: 100, y: GROUND_Y, w: 26, h: 22,
+    damage: 10, slamState: 'idle', slamT: 0, slamCd: 0, slamHitDone: false, hitStun: 0,
+  };
+  assert(!enemyUsesTelegraphedAttack(slime), 'slime contact-only');
+  assert(!tickEnemySlam(slime, 0.5, player), 'slime no slam machine');
+
+  // Session: bandit does not contact-hurt; slime does
+  const s = createSession();
+  s.loadLevel('outer-vale');
+  s.enemies.length = 0;
+  const b = s.spawnEnemy('bandit', { x: s.player.x, y: GROUND_Y });
+  assert(b && b.hasMelee, 'spawned bandit hasMelee');
+  b.slamCd = 99; // force idle — no swing
+  b.slamState = 'idle';
+  const hpBefore = s.player.hp;
+  s.player.inv = 0;
+  // Overlap bandit without attack
+  b.x = s.player.x;
+  b.y = s.player.y;
+  for (let i = 0; i < 8; i++) s.update(0.016, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(s.player.hp, hpBefore, 'bandit no contact damage while idle');
+
+  s.enemies.length = 0;
+  const sl = s.spawnEnemy('slime', { x: s.player.x, y: GROUND_Y });
+  assert(sl && !sl.hasMelee, 'slime no hasMelee');
+  sl.x = s.player.x;
+  sl.y = s.player.y;
+  s.player.inv = 0;
+  const hp2 = s.player.hp;
+  s.update(0.016, { x: 0, y: 0, jump: false, attack: false });
+  assert(s.player.hp < hp2, 'slime still contact-hurts');
 }
 
 section('Ruined Road prototype (P2 L2)');

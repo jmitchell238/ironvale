@@ -3,6 +3,8 @@
  * Caller owns entity arrays and side effects.
  */
 
+import { getEnemyMeleeCfg } from '../config/index.js';
+
 /** Boss-style chase / arena walk (not ledge-bound fodder). */
 export function enemyIsBossLike(e) {
   if (!e) return false;
@@ -12,11 +14,19 @@ export function enemyIsBossLike(e) {
     || t === 'skeleton_champion' || t === 'ogre_warchief';
 }
 
-/** Uses windup → slam → recover instead of contact-only damage. */
-export function enemyUsesTelegraphedSlam(e) {
+/**
+ * Uses windup → active hit → recover instead of contact-only damage.
+ * Bandit / skeleton / ogre / bosses; slimes stay contact-only.
+ */
+export function enemyUsesTelegraphedAttack(e) {
   if (!e) return false;
-  if (e.hasSlam) return true;
-  return e.type === 'ogre_warchief';
+  if (e.hasMelee || e.hasSlam) return true;
+  return !!getEnemyMeleeCfg(e);
+}
+
+/** @deprecated Prefer enemyUsesTelegraphedAttack — same meaning. */
+export function enemyUsesTelegraphedSlam(e) {
+  return enemyUsesTelegraphedAttack(e);
 }
 
 export function aiCanStandAt(x, refY, platforms, aiCfg) {
@@ -101,12 +111,14 @@ export function aiMoveSpeed(e, player, aiCfg) {
 }
 
 /**
- * Telegraphed slam state machine (pure). Mutates e.slam*.
- * @param {object} slamCfg - BOSS_SLAM
+ * Telegraphed melee state machine (pure). Mutates e.slam* fields.
+ * Shared by light slashes (bandit) and heavy slams (war-chief).
+ * @param {object} [meleeCfg] - ENEMY_MELEE profile; defaults via getEnemyMeleeCfg(e)
  * @returns {{ hit: true, damage: number, knockback: number, dir: number } | null}
  */
-export function tickEnemySlam(e, dt, player, slamCfg) {
-  if (!enemyUsesTelegraphedSlam(e) || !slamCfg) return null;
+export function tickEnemySlam(e, dt, player, meleeCfg) {
+  const cfg = meleeCfg || getEnemyMeleeCfg(e);
+  if (!enemyUsesTelegraphedAttack(e) || !cfg) return null;
 
   if (!e.slamState) e.slamState = 'idle';
   if (e.slamCd == null) e.slamCd = 0;
@@ -117,13 +129,14 @@ export function tickEnemySlam(e, dt, player, slamCfg) {
   const dx = player.x - e.x;
   const dy = (player.y || 0) - e.y;
   const distX = Math.abs(dx);
-  const inRange = distX <= slamCfg.range && Math.abs(dy) <= (slamCfg.aggroY != null ? slamCfg.aggroY : 55);
+  const aggroY = cfg.aggroY != null ? cfg.aggroY : 55;
+  const inRange = distX <= cfg.range && Math.abs(dy) <= aggroY;
   const dir = dx >= 0 ? 1 : -1;
 
   if (e.slamState === 'idle') {
     if (e.slamCd <= 0 && e.hitStun <= 0 && inRange) {
       e.slamState = 'windup';
-      e.slamT = slamCfg.windup;
+      e.slamT = cfg.windup;
       e.slamHitDone = false;
       e.facing = dir;
     }
@@ -135,7 +148,7 @@ export function tickEnemySlam(e, dt, player, slamCfg) {
     e.facing = dir; // track player during windup
     if (e.slamT <= 0) {
       e.slamState = 'slam';
-      e.slamT = slamCfg.active;
+      e.slamT = cfg.active;
       e.slamHitDone = false;
     }
     return null;
@@ -145,22 +158,22 @@ export function tickEnemySlam(e, dt, player, slamCfg) {
     e.slamT -= dt;
     let result = null;
     if (!e.slamHitDone) {
-      // Active frames: hit if still in slam range (not necessarily still facing)
-      const stillClose = distX <= slamCfg.range * 1.05 && Math.abs(dy) <= (slamCfg.aggroY != null ? slamCfg.aggroY : 55) + 10;
+      // Active frames: hit if still in melee range (not necessarily still facing)
+      const stillClose = distX <= cfg.range * 1.05 && Math.abs(dy) <= aggroY + 10;
       if (stillClose) {
         e.slamHitDone = true;
         const baseDmg = e.damage != null ? e.damage : 24;
         result = {
           hit: true,
-          damage: Math.floor(baseDmg * (slamCfg.damageMul != null ? slamCfg.damageMul : 1.4)),
-          knockback: slamCfg.knockback != null ? slamCfg.knockback : 280,
+          damage: Math.floor(baseDmg * (cfg.damageMul != null ? cfg.damageMul : 1)),
+          knockback: cfg.knockback != null ? cfg.knockback : 200,
           dir: e.facing || dir,
         };
       }
     }
     if (e.slamT <= 0) {
       e.slamState = 'recover';
-      e.slamT = slamCfg.recover;
+      e.slamT = cfg.recover;
     }
     return result;
   }
@@ -169,7 +182,7 @@ export function tickEnemySlam(e, dt, player, slamCfg) {
     e.slamT -= dt;
     if (e.slamT <= 0) {
       e.slamState = 'idle';
-      e.slamCd = slamCfg.cooldown;
+      e.slamCd = cfg.cooldown;
       e.slamT = 0;
     }
     return null;
@@ -179,7 +192,7 @@ export function tickEnemySlam(e, dt, player, slamCfg) {
   return null;
 }
 
-/** True while slam windup/active/recover freezes locomotion. */
+/** True while melee windup/active/recover freezes locomotion. */
 export function enemySlamBusy(e) {
   if (!e || !e.slamState) return false;
   return e.slamState === 'windup' || e.slamState === 'slam' || e.slamState === 'recover';
@@ -187,10 +200,10 @@ export function enemySlamBusy(e) {
 
 /**
  * @param {object} phys - { gravity, maxFall }
- * @param {object} [slamCfg] - BOSS_SLAM (optional; enables slam bosses)
+ * @param {object} [meleeCfg] - optional ENEMY_MELEE / BOSS_SLAM override
  * @returns {{ hit: true, damage: number, knockback: number, dir: number } | null}
  */
-export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, slamCfg) {
+export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, meleeCfg) {
   const g = phys.gravity;
   const maxFall = phys.maxFall;
 
@@ -237,14 +250,14 @@ export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, slamCfg) {
     e.vy = 0;
     e.onGround = true;
     e.hitStun = 0.3;
-    if (enemyUsesTelegraphedSlam(e)) {
+    if (enemyUsesTelegraphedAttack(e)) {
       e.slamState = 'idle';
       e.slamT = 0;
       e.slamCd = 0.4;
     }
   }
 
-  return tickEnemySlam(e, dt, player, slamCfg);
+  return tickEnemySlam(e, dt, player, meleeCfg || getEnemyMeleeCfg(e));
 }
 
 export function aiPatrolBounds(x, platform, aiCfg) {
