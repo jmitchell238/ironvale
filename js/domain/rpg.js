@@ -46,6 +46,8 @@ export function defaultAttrs() {
  *   unspentPoints: number,
  *   stats: ReturnType<typeof defaultAttrs>,
  *   levelUnlocked: number,
+ *   ngPlus: number,
+ *   campaignCleared: boolean,
  * }}
  */
 export function defaultMeta() {
@@ -55,6 +57,8 @@ export function defaultMeta() {
     unspentPoints: 0,
     stats: defaultAttrs(),
     levelUnlocked: 1,
+    ngPlus: 0,
+    campaignCleared: false,
   };
 }
 
@@ -77,6 +81,8 @@ export function normalizeMeta(raw) {
     unspentPoints: Math.max(0, Math.floor(Number(raw.unspentPoints) || 0)),
     stats,
     levelUnlocked: Math.max(1, Math.floor(Number(raw.levelUnlocked) || 1)),
+    ngPlus: Math.max(0, Math.floor(Number(raw.ngPlus) || 0)),
+    campaignCleared: !!raw.campaignCleared,
   };
 }
 
@@ -183,4 +189,56 @@ export function unlockAfterClear(meta, clearedOrder, maxOrder = 99) {
   if (!meta) return;
   const next = Math.min(maxOrder, Math.floor(clearedOrder) + 1);
   if (next > meta.levelUnlocked) meta.levelUnlocked = next;
+}
+
+/**
+ * Mark campaign cleared when the final stage is beaten.
+ * Mutates `meta`.
+ * @param {ReturnType<typeof defaultMeta>} meta
+ * @param {number} clearedOrder
+ * @param {number} maxOrder
+ */
+export function markCampaignCleared(meta, clearedOrder, maxOrder) {
+  if (!meta) return;
+  if (Math.floor(clearedOrder) >= Math.floor(maxOrder)) {
+    meta.campaignCleared = true;
+  }
+}
+
+/**
+ * Start New Game+: keep hero RPG, reset stage unlocks, bump cycle.
+ * Mutates `meta`.
+ * @param {ReturnType<typeof defaultMeta>} meta
+ * @returns {boolean} true if NG+ started
+ */
+export function startNewGamePlus(meta) {
+  if (!meta || !meta.campaignCleared) return false;
+  meta.ngPlus = (meta.ngPlus || 0) + 1;
+  meta.levelUnlocked = 1;
+  // Stay campaign-cleared so NG+ remains available after another clear
+  return true;
+}
+
+/**
+ * Enemy HP multiplier from NG+ cycle.
+ * @param {ReturnType<typeof defaultMeta>|null} meta
+ * @param {{ hpPerCycle?: number }} [cfg]
+ */
+export function ngPlusHpMul(meta, cfg = {}) {
+  const cycle = meta?.ngPlus || 0;
+  if (cycle <= 0) return 1;
+  const per = cfg.hpPerCycle ?? 0.35;
+  return 1 + cycle * per;
+}
+
+/**
+ * Enemy damage multiplier from NG+ cycle.
+ * @param {ReturnType<typeof defaultMeta>|null} meta
+ * @param {{ damagePerCycle?: number }} [cfg]
+ */
+export function ngPlusDamageMul(meta, cfg = {}) {
+  const cycle = meta?.ngPlus || 0;
+  if (cycle <= 0) return 1;
+  const per = cfg.damagePerCycle ?? 0.15;
+  return 1 + cycle * per;
 }

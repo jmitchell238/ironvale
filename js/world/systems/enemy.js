@@ -4,12 +4,13 @@
 
 import {
   ENEMIES, ENEMY_AI, MAX_ENEMIES, GROUND_Y, W, enemyIsBoss, getEnemyMeleeCfg,
+  NG_PLUS, PLAYER_MOVE,
 } from '../../config/index.js';
 import { clamp, circleHit, rand } from '../../core/math.js';
 import {
   aiUpdateEnemy, aiPatrolBounds, aiCanStandAt, enemyUsesTelegraphedAttack,
 } from '../../domain/enemyAi.js';
-import { PLAYER_MOVE } from '../../config/index.js';
+import { ngPlusDamageMul, ngPlusHpMul } from '../../domain/rpg.js';
 import { playerCx, playerCy } from '../../domain/player.js';
 
 /**
@@ -40,6 +41,8 @@ export function spawnEnemy(session, type, opts = {}) {
   if (session.enemies.length >= MAX_ENEMIES) return null;
   const def = ENEMIES[type] || ENEMIES.slime;
   const scale = 1 + Math.max(0, (session.wave - 1) * 0.04);
+  const ngHp = ngPlusHpMul(session.meta, NG_PLUS);
+  const ngDmg = ngPlusDamageMul(session.meta, NG_PLUS);
   const spawnX = opts.x != null
     ? opts.x
     : (session.cameraX + W + rand(20, 80));
@@ -68,12 +71,14 @@ export function spawnEnemy(session, type, opts = {}) {
   if (hasMelee) {
     slamCd = bossFlag ? 0.75 : 0.25 + Math.random() * 0.45;
   }
+  const hp = def.hp * scale * ngHp;
   const enemy = {
     type, x, y, w: def.w, h: def.h,
-    hp: def.hp * scale, maxHp: def.hp * scale,
+    hp, maxHp: hp,
     speed: def.speed * (0.9 + Math.random() * 0.25),
-    score: Math.floor(def.score * (1 + (session.wave - 1) * 0.05)),
-    xp: def.xp, color: def.color, damage: def.damage,
+    score: Math.floor(def.score * (1 + (session.wave - 1) * 0.05)
+      * (1 + (session.meta?.ngPlus || 0) * (NG_PLUS.scorePerCycle || 0.1))),
+    xp: def.xp, color: def.color, damage: Math.round(def.damage * ngDmg),
     skin: def.skin, frames: def.frames, fw: def.fw, fh: def.fh,
     drawScale: def.drawScale || null,
     label: def.label || null,

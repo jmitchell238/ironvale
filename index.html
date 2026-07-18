@@ -37,6 +37,7 @@
         <p id="menuRpgLine" class="rpg-line">Points: 0 · XP banked between stages</p>
 
         <button id="btnPlay" class="primary">▶  Campaign</button>
+        <button id="btnNgPlus" class="secondary hidden">✦  New Game+</button>
         <button id="btnHow" class="secondary">How to play</button>
         <button id="muteBtn" class="ghost">🔊 Sound on</button>
 
@@ -44,8 +45,9 @@
           <ol>
             <li><b>Left stick / A D</b> — run. <b>JUMP</b> or Space / W — leap platforms.</li>
             <li><b>ATK</b> or J / F / Shift — sword slash. Defeat foes for <b>XP</b>.</li>
-            <li>Clear stages: fight to the <b>gate</b>, defeat the <b>boss</b>.</li>
+            <li>Clear stages: fight to the <b>gate</b>, defeat the <b>boss</b>. Touch a <b>flag</b> for checkpoints.</li>
             <li>Level-ups <b>bank points</b> mid-stage. Spend STR/VIT/SPD/AGI/DEX/Reach <b>between stages</b>.</li>
+            <li>Beat stage 10 to unlock <b>New Game+</b> — harder foes, keep your hero.</li>
           </ol>
         </div>
         <p id="versionMenu" class="ver"></p>
@@ -87,6 +89,7 @@
           <div><span class="lbl">Points</span><strong id="clearPoints">0</strong></div>
         </div>
         <button id="btnNextLevel" class="primary">▶  Next stage</button>
+        <button id="btnClearNgPlus" class="secondary hidden">✦  New Game+</button>
         <button id="btnClearMenu" class="secondary">Main menu</button>
         <p id="versionClear" class="ver"></p>
       </div>
@@ -103,7 +106,8 @@
           <div><span class="lbl">Stage</span><strong id="overWave">0</strong></div>
           <div><span class="lbl">Kills</span><strong id="overKills">0</strong></div>
         </div>
-        <button id="btnRetry" class="primary">↻  Retry stage</button>
+        <button id="btnContinue" class="primary hidden">⚑  Continue from checkpoint</button>
+        <button id="btnRetry" class="secondary">↻  Retry stage</button>
         <button id="btnMenu" class="secondary">Main menu</button>
         <p id="versionOver" class="ver"></p>
       </div>

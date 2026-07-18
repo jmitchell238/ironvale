@@ -2,7 +2,7 @@
 
 Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
 
-**Version:** 1.3.200 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 1.4.000 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -172,15 +172,17 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 2. Spawn/tuning in `config` + `GameSession.spawnEnemy`
 3. Unit-test AI without canvas
 
-### Campaign level (P1 done shell; P2 fills content)
-1. Edit `domain/levels.js` — platforms, encounters, gate, boss arena
+### Campaign level (P1 done shell; P2 fills content; P4 = 10 stages)
+1. Edit `domain/levels.js` — platforms, encounters, checkpoints, gate, boss arena
 2. `GameSession.loadLevel` seeds state; do **not** put layout in `render.js`
 3. Clear/fail/select screens live in `index.html` + `app/main.js`
+4. Optional `checkpoints: [{ id, x }]` — death continue via over-screen
 
 ### Persistent RPG stats (P3 done)
 1. `domain/rpg.js` — XP, bank points, allocate STR/VIT/SPD/AGI/DEX/Reach
-2. Save: `xp`, `level`, `unspentPoints`, `stats`, `levelUnlocked`
+2. Save: `xp`, `level`, `unspentPoints`, `stats`, `levelUnlocked`, `ngPlus`, `campaignCleared`
 3. Blessing cards retired; allocate only between stages (clear → allocate → next)
+4. New Game+ after L10 clear: keep hero RPG, reset stage unlocks, scale enemy HP/dmg
 
 ---
 
@@ -197,7 +199,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **P3 RPG** | Done (v1.3.000) | Persistent XP + attrs between levels only |
 | **Polish melee telegraphs** | Done (v1.3.100) | Bandit/skeleton/ogre/boss windups; slime contact-only |
 | **P1b systems extract** | Done (v1.3.200) | `world/systems/*` — thin GameSession facade |
-| **P4 Scale** | Planned | ~10 levels |
+| **P4 Scale + polish** | Done (v1.4.000) | 10 stages, checkpoints, hitstop juice, New Game+ |
 
 ---
 

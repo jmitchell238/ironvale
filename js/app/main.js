@@ -49,12 +49,25 @@ function updateMenuStats() {
   document.getElementById('statWave').textContent = String(saveStore.data.bestWave);
   const rpgLine = document.getElementById('menuRpgLine');
   if (rpgLine) {
-    rpgLine.textContent =
+    let line =
       `Unspent points: ${meta.unspentPoints} · XP ${meta.xp}` +
       (meta.unspentPoints > 0 ? ' · spend after a clear' : '');
+    if (meta.ngPlus > 0) line += ` · NG+${meta.ngPlus}`;
+    else if (meta.campaignCleared) line += ' · Campaign cleared';
+    rpgLine.textContent = line;
   }
   const muteBtn = document.getElementById('muteBtn');
   if (muteBtn) muteBtn.textContent = saveStore.data.muted ? '🔇 Sound off' : '🔊 Sound on';
+  const ngBtn = document.getElementById('btnNgPlus');
+  if (ngBtn) {
+    const show = !!meta.campaignCleared;
+    ngBtn.classList.toggle('hidden', !show);
+    if (show) {
+      ngBtn.textContent = meta.ngPlus > 0
+        ? `✦  New Game+ ${meta.ngPlus + 1}`
+        : '✦  New Game+';
+    }
+  }
 }
 
 function showMenu() {
@@ -104,10 +117,10 @@ function showSelect() {
   setScreen('select');
 }
 
-function showPlay(levelId) {
+function showPlay(levelId, opts = {}) {
   audio.ensure();
   lastLevelId = levelId || lastLevelId;
-  session.startRun(lastLevelId);
+  session.startRun(lastLevelId, opts);
   if (session.screen !== 'play') {
     // locked / missing — fall back to first unlocked
     const first = listLevels().find(l => session.isStageUnlocked(l.order));
@@ -118,6 +131,24 @@ function showPlay(levelId) {
   }
   input.resetStick();
   setScreen('play');
+}
+
+function showContinue() {
+  audio.ensure();
+  if (!session.continueFromCheckpoint()) {
+    showPlay(lastLevelId);
+    return;
+  }
+  lastLevelId = session.level?.id || lastLevelId;
+  input.resetStick();
+  setScreen('play');
+}
+
+function startNgPlus() {
+  audio.ensure();
+  if (!session.beginNewGamePlus()) return;
+  updateMenuStats();
+  showSelect();
 }
 
 function showOver() {
@@ -134,6 +165,16 @@ function showOver() {
     'hidden',
     !(Math.floor(session.score) > 0 && Math.floor(session.score) >= saveStore.data.best)
   );
+  const btnCont = document.getElementById('btnContinue');
+  if (btnCont) {
+    const can = session.hasContinueCheckpoint();
+    btnCont.classList.toggle('hidden', !can);
+    const retry = document.getElementById('btnRetry');
+    if (retry) {
+      retry.classList.toggle('primary', !can);
+      retry.classList.toggle('secondary', can);
+    }
+  }
   if (window.__pendingReload) {
     window.__pendingReload = false;
     window.__reloaded = true;
@@ -202,15 +243,20 @@ function showClear() {
 
   const next = session.getNextLevel();
   const btnNext = document.getElementById('btnNextLevel');
+  const btnClearNg = document.getElementById('btnClearNgPlus');
   if (btnNext) {
     if (next) {
       btnNext.textContent = `▶  Next: ${next.name}`;
       btnNext.classList.remove('hidden');
       btnNext.disabled = false;
     } else {
-      btnNext.textContent = '🏆 Campaign clear';
+      btnNext.textContent = '🏆 Campaign clear!';
       btnNext.disabled = true;
     }
+  }
+  if (btnClearNg) {
+    const showNg = !next && !!session.meta?.campaignCleared;
+    btnClearNg.classList.toggle('hidden', !showNg);
   }
   if (window.__pendingReload) {
     window.__pendingReload = false;
@@ -252,7 +298,10 @@ const input = createInput(stage, cv, {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         if (session.screen === 'menu') showSelect();
-        else if (session.screen === 'over') showPlay(lastLevelId);
+        else if (session.screen === 'over') {
+          if (session.hasContinueCheckpoint()) showContinue();
+          else showPlay(lastLevelId);
+        }
         else if (session.screen === 'clear') {
           const next = session.getNextLevel();
           if (next) showPlay(next.id);
@@ -296,12 +345,22 @@ function frame(now) {
 }
 
 document.getElementById('btnPlay').addEventListener('click', () => { audio.click(); showSelect(); });
+const btnNgPlus = document.getElementById('btnNgPlus');
+if (btnNgPlus) {
+  btnNgPlus.addEventListener('click', () => { audio.click(); startNgPlus(); });
+}
 document.getElementById('btnHow').addEventListener('click', () => {
   audio.click();
   document.getElementById('howPanel').classList.toggle('hidden');
 });
+const btnContinue = document.getElementById('btnContinue');
+if (btnContinue) {
+  btnContinue.addEventListener('click', () => { audio.click(); showContinue(); });
+}
 document.getElementById('btnRetry').addEventListener('click', () => {
   audio.click();
+  // Full stage restart — drop continue snapshot
+  session.lastDeathCheckpoint = null;
   showPlay(lastLevelId);
 });
 document.getElementById('btnMenu').addEventListener('click', () => { audio.click(); showMenu(); });
@@ -313,6 +372,10 @@ document.getElementById('btnNextLevel').addEventListener('click', () => {
   if (next) showPlay(next.id);
   else showMenu();
 });
+const btnClearNg = document.getElementById('btnClearNgPlus');
+if (btnClearNg) {
+  btnClearNg.addEventListener('click', () => { audio.click(); startNgPlus(); });
+}
 document.getElementById('btnAllocDone').addEventListener('click', () => {
   audio.click();
   session.finishAllocate();

@@ -3,7 +3,7 @@
  */
 
 import {
-  PLAYER_SWORD, MAX_COINS, enemyIsBoss,
+  PLAYER_SWORD, MAX_COINS, enemyIsBoss, JUICE,
 } from '../../config/index.js';
 import { rand } from '../../core/math.js';
 import {
@@ -20,6 +20,17 @@ export function getAttackBoxForPlayer(session, p = session.player) {
 }
 
 /**
+ * Brief freeze-frame on hit (juice).
+ * @param {import('../GameSession.js').GameSession} session
+ * @param {number} seconds
+ */
+export function applyHitstop(session, seconds) {
+  const t = Math.max(0, Number(seconds) || 0);
+  if (t <= 0) return;
+  session.hitstop = Math.max(session.hitstop || 0, t);
+}
+
+/**
  * @param {import('../GameSession.js').GameSession} session
  */
 export function applyAttackHits(session) {
@@ -27,12 +38,22 @@ export function applyAttackHits(session) {
   if (!p) return;
   const result = resolveMeleeHits(p, session.enemies, session.stats, PLAYER_SWORD);
   if (!result.hitAny) return;
+  let anyKill = false;
+  let anyBoss = false;
   for (const hit of result.hits) {
     session.audio.hit();
-    session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#f5e6c8', 8, 100);
-    if (hit.killed) killEnemy(session, hit.enemy, hit.index);
+    session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#f5e6c8', 10, 120);
+    session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#c9a227', 4, 80);
+    if (hit.killed) {
+      anyKill = true;
+      if (enemyIsBoss(hit.enemy)) anyBoss = true;
+      killEnemy(session, hit.enemy, hit.index);
+    }
   }
-  session.shake = Math.max(session.shake, p.attackAir ? 1.6 : 1.1);
+  session.shake = Math.max(session.shake, p.attackAir ? 1.8 : 1.25);
+  if (anyBoss) applyHitstop(session, JUICE.hitstopBoss);
+  else if (anyKill) applyHitstop(session, JUICE.hitstopHeavy);
+  else applyHitstop(session, JUICE.hitstopLight);
 }
 
 /**
@@ -55,9 +76,11 @@ export function killEnemy(session, e, idx) {
   session.score += e.score;
   session.kills += 1;
   const isBoss = enemyIsBoss(e);
-  session.burst(e.x, e.y - e.h / 2, e.color, isBoss ? 30 : 12, 140);
+  const burstN = isBoss ? JUICE.bossKillBurstN : JUICE.killBurstN;
+  session.burst(e.x, e.y - e.h / 2, e.color, burstN, isBoss ? 180 : 150);
+  session.burst(e.x, e.y - e.h / 2, '#f5e6c8', isBoss ? 16 : 6, 100);
   session.audio.explode(isBoss);
-  session.shake = Math.max(session.shake, isBoss ? 3 : 1.2);
+  session.shake = Math.max(session.shake, isBoss ? 3.4 : 1.4);
   const n = isBoss ? 6 : e.type === 'ogre' ? 3 : 1;
   for (let i = 0; i < n && session.coins.length < MAX_COINS; i++) {
     session.coins.push({

@@ -17,9 +17,9 @@ import { makePlatform, canReachPlatform, platformsChainReachable } from '../doma
 import { playerCx, playerCy } from '../domain/player.js';
 import {
   cloneMeta, defaultMeta, allocatePoint, attrsToCombatStats, attrsToMaxHp,
-  isLevelUnlocked, xpToNext, unlockAfterClear,
+  isLevelUnlocked, xpToNext, unlockAfterClear, markCampaignCleared, startNewGamePlus,
 } from '../domain/rpg.js';
-import { listLevels, getLevelById } from '../domain/levels.js';
+import { listLevels, getLevelById, maxLevelOrder } from '../domain/levels.js';
 
 import { updateCamera, getCameraBounds } from './systems/camera.js';
 import {
@@ -46,6 +46,8 @@ import {
   updateLevelProgress as sysUpdateLevelProgress,
   loadLevelIntoSession,
   getNextLevel as sysGetNextLevel,
+  stashDeathCheckpoint as sysStashDeathCheckpoint,
+  hasContinueCheckpoint as sysHasContinueCheckpoint,
 } from './systems/level.js';
 import {
   updatePlayer,
@@ -130,6 +132,8 @@ export class GameSession {
     this.cameraX = 0;
     this.time = 0;
     this.shake = 0;
+    /** Hit-freeze timer (seconds remaining). */
+    this.hitstop = 0;
     this.overReason = '';
     this.player = null;
     this.stats = null;
@@ -151,6 +155,20 @@ export class GameSession {
     this.levelPhase = 'explore';
     /** Fired encounter ids */
     this.firedEncounters = new Set();
+    /** Checkpoint ids reached this run */
+    this.reachedCheckpoints = new Set();
+    /**
+     * Active mid-stage continue point.
+     * @type {{ id: string, x: number, y: number, firedIds: string[] } | null}
+     */
+    this.activeCheckpoint = null;
+    /**
+     * Snapshot for over-screen Continue (survives _initEmpty via assignment after).
+     * Cleared on full restart; set in endRun.
+     * @type {{ levelId: string, id: string, x: number, y: number, firedIds: string[] } | null}
+     */
+    // Preserve across _initEmpty only when reloading from checkpoint — see loadLevelIntoSession
+    if (this.lastDeathCheckpoint === undefined) this.lastDeathCheckpoint = null;
     this.bossSpawned = false;
     this.bossDefeated = false;
     /** @type {{ minX: number, maxX: number } | null} */
@@ -163,20 +181,49 @@ export class GameSession {
   /**
    * Load a campaign level and enter play.
    * @param {string} [levelId] defaults to first stage
+   * @param {{ fromCheckpoint?: boolean }} [opts]
    * @returns {boolean}
    */
-  loadLevel(levelId) {
-    return loadLevelIntoSession(this, levelId);
+  loadLevel(levelId, opts = {}) {
+    return loadLevelIntoSession(this, levelId, opts);
   }
 
   /**
    * Start a run — campaign levels only (no endless waves).
    * @param {string} [levelId]
+   * @param {{ fromCheckpoint?: boolean }} [opts]
    */
-  startRun(levelId) {
-    if (!this.loadLevel(levelId)) {
+  startRun(levelId, opts = {}) {
+    if (!this.loadLevel(levelId, opts)) {
       this.loadLevel(listLevels()[0]?.id);
     }
+  }
+
+  /** True if over-screen can offer Continue from checkpoint. */
+  hasContinueCheckpoint() {
+    return sysHasContinueCheckpoint(this);
+  }
+
+  /**
+   * Retry current stage from last death checkpoint (if any).
+   * @returns {boolean}
+   */
+  continueFromCheckpoint() {
+    if (!sysHasContinueCheckpoint(this)) return false;
+    const id = this.lastDeathCheckpoint.levelId;
+    return this.loadLevel(id, { fromCheckpoint: true });
+  }
+
+  /**
+   * Start New Game+ (keeps RPG, resets stage unlocks, hardens enemies).
+   * @returns {boolean}
+   */
+  beginNewGamePlus() {
+    this.meta = this._loadMetaFromSave();
+    if (!startNewGamePlus(this.meta)) return false;
+    this.persistMeta();
+    this.lastDeathCheckpoint = null;
+    return true;
   }
 
   /** Open level select screen. */
@@ -198,6 +245,7 @@ export class GameSession {
    */
   endRun(reason) {
     if (this.screen === 'over' || this.screen === 'clear' || this.screen === 'allocate') return;
+    sysStashDeathCheckpoint(this);
     this.screen = 'over';
     this.overReason = reason || 'Fallen in battle!';
     this.audio.gameOver();
@@ -215,14 +263,17 @@ export class GameSession {
   clearLevel() {
     if (this.screen === 'clear' || this.screen === 'over' || this.screen === 'allocate') return;
     this.levelPhase = 'done';
+    this.lastDeathCheckpoint = null;
+    this.activeCheckpoint = null;
     if (!this.clearBonusApplied && this.level) {
       this.clearBonusApplied = true;
       this.score += this.level.clearBonus || 0;
       this.addXp(Math.floor((this.level.clearBonus || 0) / 4));
     }
     if (this.level) {
-      const maxOrder = listLevels().reduce((m, l) => Math.max(m, l.order), 1);
+      const maxOrder = maxLevelOrder();
       unlockAfterClear(this.meta, this.level.order, maxOrder);
+      markCampaignCleared(this.meta, this.level.order, maxOrder);
     }
     this.persistMeta();
     this.audio.levelUp();
@@ -336,6 +387,14 @@ export class GameSession {
   update(dt, input) {
     if (this.screen !== 'play') return;
 
+    // Hitstop freezes gameplay briefly (juice)
+    if (this.hitstop > 0) {
+      this.hitstop = Math.max(0, this.hitstop - dt);
+      this._updateParticles(dt);
+      if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 28);
+      return;
+    }
+
     this.time += dt;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 28);
 
@@ -414,6 +473,7 @@ export class GameSession {
       cameraX: this.cameraX,
       time: this.time,
       shake: this.shake,
+      hitstop: this.hitstop,
       overReason: this.overReason,
       player: this.player,
       stats: this.stats,
@@ -429,6 +489,8 @@ export class GameSession {
       arena: this.arena,
       gateX: this.getGateX(),
       gateOpen: this.isGateOpen(),
+      activeCheckpoint: this.activeCheckpoint,
+      hasContinue: this.hasContinueCheckpoint(),
       meta: this.meta,
       pointsBankedThisStage: this.pointsBankedThisStage,
     };

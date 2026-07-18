@@ -480,6 +480,37 @@ export function drawGate(ctx, gateX, cam, open) {
   ctx.restore();
 }
 
+/**
+ * Mid-stage checkpoint flags.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ id: string, x: number, y?: number }[]} checkpoints
+ * @param {number} cam
+ * @param {Set<string>|null} reached
+ * @param {string|null} activeId
+ */
+export function drawCheckpoints(ctx, checkpoints, cam, reached, activeId) {
+  if (!checkpoints?.length) return;
+  for (const cp of checkpoints) {
+    const x = cp.x - cam;
+    if (x < -30 || x > W + 30) continue;
+    const baseY = cp.y ?? GROUND_Y;
+    const on = reached?.has(cp.id) || cp.id === activeId;
+    ctx.save();
+    // Pole
+    ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.9)' : 'rgba(100, 80, 55, 0.85)';
+    ctx.fillRect(x - 2, baseY - 52, 4, 52);
+    // Flag
+    ctx.fillStyle = on ? 'rgba(80, 160, 90, 0.85)' : 'rgba(70, 55, 40, 0.7)';
+    ctx.beginPath();
+    ctx.moveTo(x + 2, baseY - 52);
+    ctx.lineTo(x + 22, baseY - 42);
+    ctx.lineTo(x + 2, baseY - 32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 /** Soft arena edge markers while fighting the boss. */
 export function drawArenaBounds(ctx, arena, cam) {
   if (!arena) return;
@@ -518,6 +549,13 @@ export function drawSession(ctx, session, t, stick, bestScore) {
     drawBackground(ctx, cam);
     drawPlatforms(ctx, session.platforms, cam);
     if (session.levelPhase === 'explore') {
+      drawCheckpoints(
+        ctx,
+        session.level?.checkpoints || [],
+        cam,
+        session.reachedCheckpoints,
+        session.activeCheckpoint?.id || null,
+      );
       drawGate(ctx, session.getGateX?.() ?? session.level?.gateX, cam, session.isGateOpen?.() ?? false);
     }
     if (session.levelPhase === 'boss') {
@@ -534,6 +572,10 @@ export function drawSession(ctx, session, t, stick, bestScore) {
     let phaseLabel = '';
     if (session.levelPhase === 'boss') phaseLabel = 'BOSS';
     else if (session.isGateOpen?.()) phaseLabel = 'GATE OPEN';
+    else if (session.activeCheckpoint) phaseLabel = '⚑ CHECKPOINT';
+    if (session.meta?.ngPlus > 0) {
+      stageLabel += ` · NG+${session.meta.ngPlus}`;
+    }
 
     drawHud(
       ctx,

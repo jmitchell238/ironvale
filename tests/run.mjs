@@ -51,14 +51,14 @@ const {
 } = enemyAi;
 const { makePlatform, platformsChainReachable, canReachPlatform } = platforms;
 
-/** Default test save unlocks all prototype stages so level-content tests can load freely. */
+/** Default test save unlocks early campaign stages so level-content tests can load freely. */
 function createSession(saveSeed = {}) {
   return new GameSession({
     audio: {
       slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
       levelUp() {}, gameOver() {}, upgrade() {}, explode() {}, click() {},
     },
-    save: createMemorySave({ levelUnlocked: 3, ...saveSeed }),
+    save: createMemorySave({ levelUnlocked: 10, ...saveSeed }),
   });
 }
 
@@ -87,6 +87,8 @@ section('PWA shell + architecture layout');
   assert(html.includes('data-screen="select"'), 'level select screen');
   assert(html.includes('data-screen="clear"'), 'level clear screen');
   assert(html.includes('data-screen="allocate"'), 'allocate screen');
+  assert(html.includes('btnContinue'), 'checkpoint continue button');
+  assert(html.includes('btnNgPlus'), 'new game+ button');
   assert(!html.includes('js/game.js'), 'legacy game.js not loaded');
   assert(!exists('js/game.js') || true, 'legacy optional');
 }
@@ -312,16 +314,21 @@ section('game over');
 section('level shell data');
 {
   const all = levels.listLevels();
-  assert(all.length >= 3, 'three stages');
+  assert(all.length >= 10, 'ten stages');
+  assertEq(levels.maxLevelOrder(), 10, 'max order 10');
   assertEq(all[0].id, 'outer-vale', 'L1 id');
   assert(levels.getLevelById('ruined-road'), 'L2');
   assert(levels.getLevelById('iron-gate'), 'L3');
+  assert(levels.getLevelById('mistwood-trail'), 'L4');
+  assert(levels.getLevelById('ironvale-keep'), 'L10');
   const L1 = levels.getLevelById('outer-vale');
   assert(L1.bounds.maxX > L1.gateX, 'bounds past gate');
   assert(L1.boss.arenaMinX >= L1.gateX - 50, 'arena near gate');
   assert(levels.buildLevelPlatforms(L1).length >= 2, 'platforms');
   assertEq(levels.nextLevel(L1)?.id, 'ruined-road', 'next L2');
-  assertEq(levels.nextLevel(levels.getLevelById('iron-gate')), null, 'campaign end');
+  assertEq(levels.nextLevel(levels.getLevelById('iron-gate'))?.id, 'mistwood-trail', 'L3→L4');
+  assertEq(levels.nextLevel(levels.getLevelById('ironvale-keep')), null, 'campaign end L10');
+  assert(L1.checkpoints?.length >= 1, 'L1 has checkpoint');
 }
 
 section('Outer Vale prototype (P2 L1)');
@@ -594,8 +601,8 @@ section('Iron Gate prototype (P2 L3)');
   assert(boss, 'warchief present');
   assert(boss.hasSlam, 'spawned hasSlam');
   assert(enemyUsesTelegraphedSlam(boss), 'telegraph slam');
-  // No next stage → campaign prototype complete
-  assertEq(s.getNextLevel(), null, 'campaign clear after L3');
+  // With full unlock, L4 is available after L3 shell
+  assertEq(s.getNextLevel()?.id, 'mistwood-trail', 'L4 after Iron Gate');
   s.killEnemy(boss, s.enemies.indexOf(boss));
   assert(s.screen === 'allocate' || s.screen === 'clear', 'allocate or clear');
   if (s.screen === 'allocate') s.finishAllocate();
@@ -708,6 +715,108 @@ section('session clear without banked points → clear screen');
   s.clearLevel();
   s.level.clearBonus = bonus;
   assertEq(s.screen, 'clear', 'clear when no points');
+}
+
+section('P4: later stages authored + jump-safe');
+{
+  const { ENEMIES, enemyIsBoss } = config;
+  const ids = [
+    'mistwood-trail', 'broken-bridge', 'bone-crypt',
+    'ashen-causeway', 'barracks-yard', 'castle-approach', 'ironvale-keep',
+  ];
+  for (const id of ids) {
+    const L = levels.getLevelById(id);
+    assert(L && !L.stub, id + ' present');
+    assert(enemyIsBoss(L.boss.type), id + ' boss flagged');
+    assert(ENEMIES[L.boss.type], id + ' boss def');
+    const plats = levels.buildLevelPlatforms(L);
+    assert(plats.length >= 10, id + ' layout depth');
+    assert(platformsChainReachable(plats, 1, 1), id + ' jump-safe');
+    assert(L.checkpoints?.length >= 1, id + ' checkpoint');
+    assert(L.encounters.length >= 5, id + ' encounters');
+  }
+  assertEq(levels.getLevelById('ironvale-keep').boss.type, 'iron_lord', 'final boss');
+  // Session load L10 + campaign clear
+  const s = createSession({ levelUnlocked: 10 });
+  assert(s.loadLevel('ironvale-keep'), 'load L10');
+  assertEq(s.wave, 10, 'stage 10');
+  s.enemies.length = 0;
+  for (const enc of s.level.encounters) s.firedEncounters.add(enc.id);
+  s.player.x = s.level.gateX + 10;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 'L10 boss phase');
+  assert(s.enemies.some(e => e.type === 'iron_lord'), 'iron lord present');
+  assertEq(s.getNextLevel(), null, 'no stage after L10');
+  const boss = s.enemies.find(e => e.isBoss);
+  s.killEnemy(boss, s.enemies.indexOf(boss));
+  if (s.screen === 'allocate') s.finishAllocate();
+  assertEq(s.screen, 'clear', 'L10 clear');
+  assert(s.meta.campaignCleared, 'campaign cleared flag');
+}
+
+section('P4: checkpoints continue');
+{
+  const s = createSession();
+  s.loadLevel('outer-vale');
+  const cp = s.level.checkpoints[0];
+  // Fire early encounters, walk past checkpoint
+  for (const enc of s.level.encounters) {
+    if (enc.triggerX <= cp.x) s.firedEncounters.add(enc.id);
+  }
+  s.enemies.length = 0;
+  s.player.x = cp.x + 5;
+  s.updateLevelProgress();
+  assert(s.activeCheckpoint, 'checkpoint active');
+  assertEq(s.activeCheckpoint.id, cp.id, 'cp id');
+  s.hurtPlayer(999);
+  assertEq(s.screen, 'over', 'over after death');
+  assert(s.hasContinueCheckpoint(), 'can continue');
+  assert(s.continueFromCheckpoint(), 'continue loads');
+  assertEq(s.screen, 'play', 'back to play');
+  assertEq(s.player.x, cp.x, 'spawn at checkpoint');
+  assert(s.firedEncounters.has(s.level.encounters[0].id), 'early enc kept');
+}
+
+section('P4: New Game+ + juice hitstop');
+{
+  const meta = rpg.defaultMeta();
+  meta.campaignCleared = true;
+  meta.stats.str = 3;
+  meta.level = 8;
+  assert(rpg.startNewGamePlus(meta), 'ng+ starts');
+  assertEq(meta.ngPlus, 1, 'cycle 1');
+  assertEq(meta.levelUnlocked, 1, 'stages reset');
+  assertEq(meta.stats.str, 3, 'stats kept');
+  assertEq(meta.level, 8, 'hero lv kept');
+  assert(!rpg.startNewGamePlus({ ...rpg.defaultMeta() }), 'needs clear');
+  assert(rpg.ngPlusHpMul({ ngPlus: 1 }) > 1, 'hp mul');
+  assert(rpg.ngPlusDamageMul({ ngPlus: 2 }) > rpg.ngPlusDamageMul({ ngPlus: 1 }), 'dmg scales');
+
+  const save = createMemorySave({
+    campaignCleared: true, ngPlus: 0, levelUnlocked: 10, stats: { str: 2 },
+  });
+  const s = new GameSession({
+    audio: {
+      slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
+      levelUp() {}, gameOver() {}, upgrade() {}, explode() {}, click() {},
+    },
+    save,
+  });
+  assert(s.beginNewGamePlus(), 'session ng+');
+  assertEq(s.meta.ngPlus, 1, 'session cycle');
+  assert(s.loadLevel('outer-vale'), 'L1 after ng+');
+  const e = s.spawnEnemy('bandit', { x: s.player.x + 40, y: GROUND_Y });
+  const base = config.ENEMIES.bandit.hp;
+  assert(e.hp > base, 'ng+ tougher bandit');
+
+  // Hitstop on sword hit
+  s.player.x = e.x - 20;
+  s.player.facing = 1;
+  s.doAttack();
+  assert(s.hitstop > 0, 'hitstop applied');
+  const hs = s.hitstop;
+  s.update(0.01, { x: 0, y: 0, jump: false, attack: false });
+  assert(s.hitstop < hs, 'hitstop drains');
 }
 
 console.log(`\n\n${passed} passed, ${failed} failed`);

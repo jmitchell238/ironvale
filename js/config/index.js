@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '1.3.200';
+export const GAME_VERSION = '1.4.000';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 
@@ -118,6 +118,64 @@ export const ENEMIES = {
     color: '#2f4a14', damage: 24, skin: 'ogre', frames: 4, fw: 56, fh: 56,
     isBoss: true, drawScale: 1.75, label: 'Ogre War-Chief', hasMelee: true, hasSlam: true,
   },
+  /** L4 Mistwood — aggressive bandit pack leader. */
+  bandit_lord: {
+    w: 36, h: 48, hp: 175, speed: 64, score: 140, xp: 17,
+    color: '#4a0808', damage: 19, skin: 'bandit', frames: 4, fw: 40, fh: 48,
+    isBoss: true, drawScale: 1.55, label: 'Bandit Lord', hasMelee: true,
+  },
+  /** L5 Broken Bridge — fleet skeleton elite. */
+  bone_reaver: {
+    w: 32, h: 48, hp: 210, speed: 74, score: 165, xp: 20,
+    color: '#d8d0b0', damage: 21, skin: 'skeleton', frames: 4, fw: 40, fh: 48,
+    isBoss: true, drawScale: 1.58, label: 'Bone Reaver', hasMelee: true,
+  },
+  /** L6 Bone Crypt — tanky crypt guardian. */
+  crypt_guardian: {
+    w: 34, h: 50, hp: 250, speed: 52, score: 190, xp: 23,
+    color: '#b8b090', damage: 22, skin: 'skeleton', frames: 4, fw: 40, fh: 48,
+    isBoss: true, drawScale: 1.65, label: 'Crypt Guardian', hasMelee: true,
+  },
+  /** L7 Ashen Causeway — flaming-themed ogre elite. */
+  ash_brute: {
+    w: 54, h: 56, hp: 300, speed: 36, score: 240, xp: 30,
+    color: '#4a2a10', damage: 26, skin: 'ogre', frames: 4, fw: 56, fh: 56,
+    isBoss: true, drawScale: 1.78, label: 'Ash Brute', hasMelee: true, hasSlam: true,
+  },
+  /** L8 Barracks Yard — dual-threat captain. */
+  barracks_captain: {
+    w: 38, h: 50, hp: 280, speed: 62, score: 210, xp: 26,
+    color: '#3a0a0a', damage: 23, skin: 'bandit', frames: 4, fw: 40, fh: 48,
+    isBoss: true, drawScale: 1.62, label: 'Barracks Captain', hasMelee: true,
+  },
+  /** L9 Castle Approach — iron sentinel. */
+  iron_sentinel: {
+    w: 56, h: 58, hp: 340, speed: 38, score: 280, xp: 34,
+    color: '#1f3010', damage: 28, skin: 'ogre', frames: 4, fw: 56, fh: 56,
+    isBoss: true, drawScale: 1.82, label: 'Iron Sentinel', hasMelee: true, hasSlam: true,
+  },
+  /** L10 Ironvale Keep — campaign final boss. */
+  iron_lord: {
+    w: 58, h: 60, hp: 420, speed: 42, score: 400, xp: 50,
+    color: '#1a2808', damage: 30, skin: 'ogre', frames: 4, fw: 56, fh: 56,
+    isBoss: true, drawScale: 1.9, label: 'Iron Lord', hasMelee: true, hasSlam: true,
+  },
+};
+
+/** New Game+ enemy scaling per cycle. */
+export const NG_PLUS = {
+  hpPerCycle: 0.35,
+  damagePerCycle: 0.15,
+  scorePerCycle: 0.10,
+};
+
+/** Juice / feel tuning. */
+export const JUICE = {
+  hitstopLight: 0.045,
+  hitstopHeavy: 0.075,
+  hitstopBoss: 0.11,
+  killBurstN: 16,
+  bossKillBurstN: 40,
 };
 
 /**
@@ -145,14 +203,42 @@ export const ENEMY_MELEE = {
     range: 56, windup: 0.34, active: 0.14, recover: 0.42, cooldown: 0.70,
     damageMul: 1.15, knockback: 210, aggroY: 52,
   },
+  bandit_lord: {
+    range: 58, windup: 0.32, active: 0.14, recover: 0.40, cooldown: 0.65,
+    damageMul: 1.2, knockback: 220, aggroY: 52,
+  },
+  barracks_captain: {
+    range: 60, windup: 0.30, active: 0.14, recover: 0.38, cooldown: 0.60,
+    damageMul: 1.25, knockback: 230, aggroY: 52,
+  },
   skeleton_champion: {
     range: 54, windup: 0.32, active: 0.14, recover: 0.40, cooldown: 0.68,
     damageMul: 1.2, knockback: 220, aggroY: 52,
+  },
+  bone_reaver: {
+    range: 56, windup: 0.28, active: 0.14, recover: 0.36, cooldown: 0.62,
+    damageMul: 1.25, knockback: 230, aggroY: 52,
+  },
+  crypt_guardian: {
+    range: 58, windup: 0.36, active: 0.16, recover: 0.44, cooldown: 0.72,
+    damageMul: 1.3, knockback: 240, aggroY: 54, heavy: true,
   },
   /** Heavy slam — long windup, big hit. */
   ogre_warchief: {
     range: 78, windup: 0.58, active: 0.20, recover: 0.70, cooldown: 1.25,
     damageMul: 1.4, knockback: 300, aggroY: 55, heavy: true,
+  },
+  ash_brute: {
+    range: 80, windup: 0.55, active: 0.20, recover: 0.68, cooldown: 1.20,
+    damageMul: 1.45, knockback: 310, aggroY: 55, heavy: true,
+  },
+  iron_sentinel: {
+    range: 82, windup: 0.56, active: 0.22, recover: 0.72, cooldown: 1.18,
+    damageMul: 1.5, knockback: 320, aggroY: 56, heavy: true,
+  },
+  iron_lord: {
+    range: 86, windup: 0.52, active: 0.22, recover: 0.65, cooldown: 1.05,
+    damageMul: 1.55, knockback: 340, aggroY: 58, heavy: true,
   },
   boss: {
     range: 78, windup: 0.58, active: 0.20, recover: 0.70, cooldown: 1.25,

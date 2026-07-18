@@ -18,7 +18,19 @@ function defaultSave() {
     unspentPoints: meta.unspentPoints,
     stats: meta.stats,
     levelUnlocked: meta.levelUnlocked,
+    ngPlus: meta.ngPlus,
+    campaignCleared: meta.campaignCleared,
   };
+}
+
+function applyMetaFields(target, meta) {
+  target.xp = meta.xp;
+  target.level = meta.level;
+  target.unspentPoints = meta.unspentPoints;
+  target.stats = meta.stats;
+  target.levelUnlocked = meta.levelUnlocked;
+  target.ngPlus = meta.ngPlus;
+  target.campaignCleared = meta.campaignCleared;
 }
 
 function readStorage() {
@@ -30,11 +42,7 @@ function readStorage() {
     const merged = { ...base, ...parsed };
     // Normalize RPG fields through domain
     const meta = normalizeMeta(merged);
-    merged.xp = meta.xp;
-    merged.level = meta.level;
-    merged.unspentPoints = meta.unspentPoints;
-    merged.stats = meta.stats;
-    merged.levelUnlocked = meta.levelUnlocked;
+    applyMetaFields(merged, meta);
     return merged;
   } catch {
     return defaultSave();
@@ -64,11 +72,7 @@ export function createSaveStore() {
      */
     saveMeta(meta) {
       const m = normalizeMeta(meta);
-      data.xp = m.xp;
-      data.level = m.level;
-      data.unspentPoints = m.unspentPoints;
-      data.stats = { ...m.stats };
-      data.levelUnlocked = m.levelUnlocked;
+      applyMetaFields(data, { ...m, stats: { ...m.stats } });
       writeStorage(data);
     },
 
@@ -103,11 +107,7 @@ export function createMemorySave(seed = {}) {
     getMeta() { return normalizeMeta(data); },
     saveMeta(meta) {
       const m = normalizeMeta(meta);
-      data.xp = m.xp;
-      data.level = m.level;
-      data.unspentPoints = m.unspentPoints;
-      data.stats = { ...m.stats };
-      data.levelUnlocked = m.levelUnlocked;
+      applyMetaFields(data, { ...m, stats: { ...m.stats } });
     },
     recordGameEnd(score, wave, kills) {
       data.games += 1;
