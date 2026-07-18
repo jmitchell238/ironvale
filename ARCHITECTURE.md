@@ -2,7 +2,7 @@
 
 Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
 
-**Version:** 1.2.300 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 1.3.000 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -36,7 +36,7 @@ Clean, layered architecture for a medieval action-platformer (Castlevania-style 
 ┌───────────────────────────▼─────────────────────────────┐
 │  domain/              Game rules (no DOM, no globals)    │
 │    combat · enemyAi · platforms · player · upgrades      │
-│    levels             Campaign stage data + helpers      │
+│    levels · rpg       Campaign stages + persistent attrs │
 └───────────────────────────┬─────────────────────────────┘
                             │ reads
 ┌───────────────────────────▼─────────────────────────────┐
@@ -68,7 +68,8 @@ js/
     enemyAi.js           Ledge-safe patrol / aggro / integrate
     platforms.js         Jump-safe layout + procgen helpers
     player.js            Factory + body helpers + movement
-    upgrades.js          Blessing cards (interim) + defaultStats
+    upgrades.js          Combat stats factory (blessings retired)
+    rpg.js               Persistent XP / attrs / unlock (between levels)
     levels.js            Stage defs: bounds, platforms, encounters, gate, boss
   config/
     index.js             PLAYER_BODY / MOVE / SWORD / DRAW, enemies
@@ -104,8 +105,9 @@ Single source of run mutation:
 const session = new GameSession({ audio, save });
 session.loadLevel('outer-vale'); // or startRun(levelId)
 session.update(dt, { x, y, jump, attack });
-// session.screen: 'menu' | 'select' | 'play' | 'levelup' | 'clear' | 'over'
+// session.screen: 'menu' | 'select' | 'play' | 'allocate' | 'clear' | 'over'
 // session.levelPhase: 'explore' | 'boss' | 'done'
+// session.meta: { xp, level, unspentPoints, stats, levelUnlocked }
 ```
 
 - Injects **audio** and **save** adapters (testable with no-ops).
@@ -118,14 +120,14 @@ session.update(dt, { x, y, jump, attack });
 ## 6. Runtime screens
 
 ```
-menu ──Campaign──► select ──pick stage──► play
+menu ──Campaign──► select ──pick unlocked──► play
                                          │
                     death ──► over ──Retry──► play
                                          │
-                    XP ──► levelup ──pick──► play
+                    XP mid-stage ── banks unspent points (no pause)
                                          │
-                    boss down ──► clear ──Next──► play (next stage)
-                                       └──Menu──► menu
+                    boss down ──► allocate? ──► clear ──Next──► play
+                         (if unspent)      └──Menu──► menu
 ```
 
 ---
@@ -165,10 +167,10 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 2. `GameSession.loadLevel` seeds state; do **not** put layout in `render.js`
 3. Clear/fail/select screens live in `index.html` + `app/main.js`
 
-### Persistent RPG stats (P3)
-1. New domain module `domain/rpg.js` (allocate points between levels)
-2. Save adapter stores `xp`, `stats`, `levelUnlocked`
-3. Replace `upgrades.js` blessing cards gradually
+### Persistent RPG stats (P3 done)
+1. `domain/rpg.js` — XP, bank points, allocate STR/VIT/SPD/AGI/DEX/Reach
+2. Save: `xp`, `level`, `unspentPoints`, `stats`, `levelUnlocked`
+3. Blessing cards retired; allocate only between stages (clear → allocate → next)
 
 ---
 
@@ -182,7 +184,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **P2 L1 Outer Vale** | Done (v1.2.100) | Teaching layout, slimes + light bandits, bandit captain |
 | **P2 L2 Ruined Road** | Done (v1.2.200) | Tighter platforms, skeletons, skeleton champion |
 | **P2 L3 Iron Gate** | Done (v1.2.300) | Ogres + war-chief telegraphed slams, campaign clear |
-| **P3 RPG** | Planned | XP points **between levels only** |
+| **P3 RPG** | Done (v1.3.000) | Persistent XP + attrs between levels only |
 | **P4 Scale** | Planned | ~10 levels |
 
 ---

@@ -10,7 +10,7 @@
 
 import {
   PLAYER, PLAYER_BODY, PLAYER_MOVE, PLAYER_SWORD, ENEMIES, ENEMY_AI, CAM, W, GROUND_Y,
-  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, xpForLevel, enemyIsBoss, BOSS_SLAM,
+  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, enemyIsBoss, BOSS_SLAM,
 } from '../config/index.js';
 import { clamp, circleHit, dist, rand, lerp } from '../core/math.js';
 import {
@@ -21,7 +21,10 @@ import {
 } from '../domain/enemyAi.js';
 import { makePlatform, canReachPlatform, platformsChainReachable } from '../domain/platforms.js';
 import { makePlayer, playerCx, playerCy, integratePlayerMovement } from '../domain/player.js';
-import { defaultStats, pickLevelUpChoices, applyUpgradeToRun } from '../domain/upgrades.js';
+import {
+  cloneMeta, defaultMeta, applyXp, allocatePoint, attrsToCombatStats, attrsToMaxHp,
+  unlockAfterClear, isLevelUnlocked, xpToNext,
+} from '../domain/rpg.js';
 import {
   getLevelById, listLevels, buildLevelPlatforms, nextLevel,
   cameraLimits, playerWorldLimits,
@@ -34,10 +37,17 @@ const noopAudio = {
 
 const noopSave = {
   recordGameEnd() {},
-  get data() { return { best: 0, games: 0, bestWave: 0, totalKills: 0, muted: false }; },
+  get data() {
+    return {
+      best: 0, games: 0, bestWave: 0, totalKills: 0, muted: false,
+      ...defaultMeta(),
+    };
+  },
+  getMeta() { return defaultMeta(); },
+  saveMeta() {},
 };
 
-/** @typedef {'menu'|'select'|'play'|'levelup'|'clear'|'over'} SessionScreen */
+/** @typedef {'menu'|'select'|'play'|'levelup'|'allocate'|'clear'|'over'} SessionScreen */
 /** @typedef {'explore'|'boss'|'done'} LevelPhase */
 
 export class GameSession {
@@ -47,7 +57,42 @@ export class GameSession {
   constructor(deps = {}) {
     this.audio = deps.audio || noopAudio;
     this.save = deps.save || noopSave;
+    /** @type {ReturnType<typeof defaultMeta>} */
+    this.meta = this._loadMetaFromSave();
     this._initEmpty();
+  }
+
+  _loadMetaFromSave() {
+    if (this.save && typeof this.save.getMeta === 'function') {
+      return cloneMeta(this.save.getMeta());
+    }
+    return defaultMeta();
+  }
+
+  persistMeta() {
+    if (this.save && typeof this.save.saveMeta === 'function') {
+      this.save.saveMeta(this.meta);
+    }
+  }
+
+  /** Sync player HUD XP fields from persistent meta. */
+  _syncPlayerProgress() {
+    const p = this.player;
+    if (!p || !this.meta) return;
+    p.level = this.meta.level;
+    p.xp = this.meta.xp;
+    p.xpNext = xpToNext(this.meta.level);
+  }
+
+  /** Apply allocated attrs → combat stats + max HP. */
+  _applyMetaToRun() {
+    this.stats = attrsToCombatStats(this.meta.stats);
+    if (this.player) {
+      const maxHp = attrsToMaxHp(this.meta.stats);
+      this.player.maxHp = maxHp;
+      this.player.hp = maxHp;
+      this._syncPlayerProgress();
+    }
   }
 
   _initEmpty() {
@@ -71,6 +116,8 @@ export class GameSession {
     this.jumpBuffered = 0;
     this.jumpHeld = false;
     this.attackQueued = false;
+    /** Points banked this stage (for clear/allocate summary). */
+    this.pointsBankedThisStage = 0;
 
     // ---- level shell ----
     /** @type {import('../domain/levels.js').LevelDef | null} */
@@ -97,13 +144,17 @@ export class GameSession {
     const def = levelId ? getLevelById(levelId) : listLevels()[0];
     if (!def) return false;
 
+    // Refresh meta from save, then enforce unlock
+    this.meta = this._loadMetaFromSave();
+    if (!isLevelUnlocked(this.meta, def.order)) return false;
+
     this._initEmpty();
     this.level = def;
     this.wave = def.order;
-    this.stats = defaultStats();
     this.player = makePlayer();
     this.player.x = def.spawn.x;
     this.player.y = def.spawn.y ?? GROUND_Y;
+    this._applyMetaToRun();
     this.platforms = buildLevelPlatforms(def);
     this.cameraX = Math.max(0, def.spawn.x - CAM.focusX);
     this.levelPhase = 'explore';
@@ -123,20 +174,27 @@ export class GameSession {
 
   /** Open level select screen. */
   openLevelSelect() {
+    this.meta = this._loadMetaFromSave();
     this.screen = 'select';
     this.attackQueued = false;
     this.jumpHeld = false;
   }
 
+  /** Whether a stage order is unlocked in campaign progress. */
+  isStageUnlocked(order) {
+    return isLevelUnlocked(this.meta, order);
+  }
+
   /**
-   * Fail the current stage (death / quit).
+   * Fail the current stage (death / quit). XP already banked mid-stage is kept.
    * @param {string} [reason]
    */
   endRun(reason) {
-    if (this.screen === 'over' || this.screen === 'clear') return;
+    if (this.screen === 'over' || this.screen === 'clear' || this.screen === 'allocate') return;
     this.screen = 'over';
     this.overReason = reason || 'Fallen in battle!';
     this.audio.gameOver();
+    this.persistMeta();
     this.save.recordGameEnd(this.score, this.wave, this.kills);
     if (this.player) {
       this.burst(playerCx(this.player), playerCy(this.player), '#c9a227', 24, 160);
@@ -145,24 +203,53 @@ export class GameSession {
 
   /**
    * Stage clear — boss defeated.
+   * Unspent attribute points open the allocate screen (between levels only).
    */
   clearLevel() {
-    if (this.screen === 'clear' || this.screen === 'over') return;
+    if (this.screen === 'clear' || this.screen === 'over' || this.screen === 'allocate') return;
     this.levelPhase = 'done';
-    this.screen = 'clear';
     if (!this.clearBonusApplied && this.level) {
       this.clearBonusApplied = true;
       this.score += this.level.clearBonus || 0;
       this.addXp(Math.floor((this.level.clearBonus || 0) / 4));
     }
+    if (this.level) {
+      const maxOrder = listLevels().reduce((m, l) => Math.max(m, l.order), 1);
+      unlockAfterClear(this.meta, this.level.order, maxOrder);
+    }
+    this.persistMeta();
     this.audio.levelUp();
     this.save.recordGameEnd(this.score, this.wave, this.kills);
     if (this.player) {
       this.burst(playerCx(this.player), playerCy(this.player), '#c9a227', 28, 180);
     }
+    // Allocate between levels when points are banked; else clear summary.
+    this.screen = this.meta.unspentPoints > 0 ? 'allocate' : 'clear';
+  }
+
+  /**
+   * Spend one unspent point (between levels only).
+   * @param {string} attrKey
+   * @returns {boolean}
+   */
+  allocateAttr(attrKey) {
+    if (this.screen !== 'allocate' && this.screen !== 'clear') return false;
+    if (!allocatePoint(this.meta, attrKey)) return false;
+    this.stats = attrsToCombatStats(this.meta.stats);
+    this.persistMeta();
+    this.audio.upgrade();
+    return true;
+  }
+
+  /** Leave allocate screen → clear summary (Next stage / menu). */
+  finishAllocate() {
+    if (this.screen !== 'allocate') return;
+    this.persistMeta();
+    this.screen = 'clear';
   }
 
   goMenu() {
+    this.persistMeta();
     this.screen = 'menu';
     this.attackQueued = false;
     this.jumpHeld = false;
@@ -170,7 +257,10 @@ export class GameSession {
 
   /** @returns {import('../domain/levels.js').LevelDef | null} */
   getNextLevel() {
-    return this.level ? nextLevel(this.level) : null;
+    const n = this.level ? nextLevel(this.level) : null;
+    if (!n) return null;
+    if (!isLevelUnlocked(this.meta, n.order)) return null;
+    return n;
   }
 
   // ---- input hooks ----------------------------------------------------------
@@ -366,30 +456,31 @@ export class GameSession {
     }
   }
 
+  /**
+   * Grant XP (kills / coins / clear bonus).
+   * Mid-stage level-ups only bank unspent points — no blessing cards.
+   */
   addXp(amount) {
-    const p = this.player;
-    if (!p || amount <= 0) return;
-    p.xp += amount;
-    while (p.xp >= p.xpNext) {
-      p.xp -= p.xpNext;
-      p.level += 1;
-      p.xpNext = xpForLevel(p.level);
-      this.openLevelUp();
+    if (amount <= 0 || !this.meta) return;
+    const before = this.meta.unspentPoints;
+    const { levelsGained } = applyXp(this.meta, amount);
+    this.pointsBankedThisStage += Math.max(0, this.meta.unspentPoints - before);
+    this._syncPlayerProgress();
+    if (levelsGained > 0) {
+      // Soft feedback only — allocation waits until between levels.
+      this.audio.levelUp();
+      this.persistMeta();
     }
   }
 
+  /** @deprecated Blessing cards removed; use allocateAttr between levels. */
   openLevelUp() {
-    if (this.screen === 'clear' || this.screen === 'over') return;
-    this.levelChoices = pickLevelUpChoices(this.player);
-    this.screen = 'levelup';
-    this.audio.levelUp();
+    /* no-op: mid-stage allocate disabled */
   }
 
-  applyUpgrade(up) {
-    applyUpgradeToRun(this.player, this.stats, up);
-    this.audio.upgrade();
-    this.levelChoices = [];
-    this.screen = 'play';
+  /** @deprecated */
+  applyUpgrade() {
+    if (this.screen === 'levelup') this.screen = 'play';
   }
 
   hurtPlayer(dmg) {
@@ -611,6 +702,8 @@ export class GameSession {
       arena: this.arena,
       gateX: this.getGateX(),
       gateOpen: this.isGateOpen(),
+      meta: this.meta,
+      pointsBankedThisStage: this.pointsBankedThisStage,
     };
   }
 }
@@ -621,7 +714,6 @@ export {
   canReachPlatform,
   platformsChainReachable,
   getAttackBox,
-  defaultStats,
   PLAYER,
   PLAYER_SWORD,
   PLAYER_BODY,

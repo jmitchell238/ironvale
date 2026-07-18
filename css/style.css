@@ -49,6 +49,7 @@ html, body {
 
 .screen[data-screen="menu"],
 .screen[data-screen="select"],
+.screen[data-screen="allocate"],
 .screen[data-screen="clear"],
 .screen[data-screen="over"] {
   display: flex; align-items: center; justify-content: center;
@@ -201,4 +202,67 @@ button.ghost {
 button.primary:disabled {
   opacity: 0.55; cursor: default;
   box-shadow: none;
+}
+
+.rpg-line {
+  margin: -6px 0 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.level-btn.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.level-btn.locked:hover {
+  border-color: var(--line);
+  background: rgba(0, 0, 0, 0.22);
+}
+.level-btn.locked .level-order {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.allocate-card { max-height: min(640px, 100%); overflow-y: auto; }
+.alloc-points {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--gold);
+}
+.alloc-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 0 0 14px; text-align: left;
+}
+.alloc-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.alloc-row .alloc-info { flex: 1; min-width: 0; }
+.alloc-row .alloc-name {
+  font-weight: 800; font-size: 0.95rem; color: var(--text);
+}
+.alloc-row .alloc-desc {
+  font-size: 0.72rem; color: var(--muted); margin-top: 2px;
+}
+.alloc-row .alloc-val {
+  flex: 0 0 auto;
+  font-weight: 800; color: var(--gold);
+  min-width: 1.5rem; text-align: center;
+}
+.alloc-row .alloc-plus {
+  flex: 0 0 40px; width: 40px; height: 40px;
+  margin: 0; padding: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--gold), #a67c00);
+  color: #1a1420; font-size: 1.25rem; font-weight: 900;
+  line-height: 40px;
+}
+.alloc-row .alloc-plus:disabled {
+  opacity: 0.35; cursor: default;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
 }

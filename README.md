@@ -18,9 +18,9 @@ Medieval **2D platformer** — run, jump, and sword-slash through discrete stage
 
 - Knight character art (GameArt2D free sprite)
 - Gravity, coyote time, variable jump
-- Campaign stages with authored layouts (stubs for prototypes)
-- Melee combat, coins/XP, level-up blessings (interim)
-- End gate → boss arena → stage clear
+- Campaign stages with authored layouts and end bosses
+- Melee combat, coins/XP; persistent RPG stats **between stages**
+- End gate → boss arena → allocate points → stage clear
 - Installable PWA
 
 ## Architecture

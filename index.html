@@ -31,9 +31,10 @@
 
         <div class="stats">
           <div><span class="lbl">Best</span><strong id="statBest">0</strong></div>
-          <div><span class="lbl">Games</span><strong id="statGames">0</strong></div>
+          <div><span class="lbl">Hero Lv</span><strong id="statHeroLv">1</strong></div>
           <div><span class="lbl">Stage</span><strong id="statWave">0</strong></div>
         </div>
+        <p id="menuRpgLine" class="rpg-line">Points: 0 · XP banked between stages</p>
 
         <button id="btnPlay" class="primary">▶  Campaign</button>
         <button id="btnHow" class="secondary">How to play</button>
@@ -42,9 +43,9 @@
         <div id="howPanel" class="how hidden">
           <ol>
             <li><b>Left stick / A D</b> — run. <b>JUMP</b> or Space / W — leap platforms.</li>
-            <li><b>ATK</b> or J / F / Shift — sword slash. Defeat foes for gold XP.</li>
-            <li>Clear each stage: fight to the <b>gate</b>, then defeat the <b>boss</b>.</li>
-            <li>Platforms are always single-jump reachable — no double jump needed.</li>
+            <li><b>ATK</b> or J / F / Shift — sword slash. Defeat foes for <b>XP</b>.</li>
+            <li>Clear stages: fight to the <b>gate</b>, defeat the <b>boss</b>.</li>
+            <li>Level-ups <b>bank points</b> mid-stage. Spend STR/VIT/SPD/AGI/DEX/Reach <b>between stages</b>.</li>
           </ol>
         </div>
         <p id="versionMenu" class="ver"></p>
@@ -64,6 +65,17 @@
     <button id="btnPauseMenu" class="icon-btn play-chrome hidden" type="button" title="Menu">☰</button>
     <p id="playHint" class="hint play-chrome hidden">Left: run · JUMP · ATK · reach the gate</p>
 
+    <div class="screen hidden" data-screen="allocate" id="screenAllocate">
+      <div class="menu-card allocate-card">
+        <h2 class="clear-title">Train Attributes</h2>
+        <p class="tagline">Spend points between stages</p>
+        <p id="allocPoints" class="alloc-points">Unspent: 0</p>
+        <div id="allocList" class="alloc-list"></div>
+        <button id="btnAllocDone" class="primary">Continue</button>
+        <p id="versionAlloc" class="ver"></p>
+      </div>
+    </div>
+
     <div class="screen hidden" data-screen="clear" id="screenClear">
       <div class="menu-card">
         <h2 class="clear-title">Stage Clear!</h2>
@@ -71,6 +83,8 @@
         <div class="stats tall">
           <div><span class="lbl">Score</span><strong id="clearScore">0</strong></div>
           <div><span class="lbl">Kills</span><strong id="clearKills">0</strong></div>
+          <div><span class="lbl">Hero Lv</span><strong id="clearHeroLv">1</strong></div>
+          <div><span class="lbl">Points</span><strong id="clearPoints">0</strong></div>
         </div>
         <button id="btnNextLevel" class="primary">▶  Next stage</button>
         <button id="btnClearMenu" class="secondary">Main menu</button>

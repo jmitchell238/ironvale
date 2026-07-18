@@ -286,7 +286,10 @@ export function drawHud(ctx, p, sc, best, opts = {}) {
   ctx.fillText(stageLabel, W - 14, 22);
   ctx.fillStyle = '#a89070';
   ctx.font = '11px system-ui, sans-serif';
-  const rightSub = phaseLabel || ('LV ' + (p ? p.level : 1));
+  const pts = opts.unspentPoints != null ? opts.unspentPoints : null;
+  let rightSub = phaseLabel || ('LV ' + (p ? p.level : 1));
+  if (pts != null && pts > 0 && !phaseLabel) rightSub = 'LV ' + (p ? p.level : 1) + ' · +' + pts + 'pt';
+  else if (!phaseLabel && p) rightSub = 'LV ' + p.level;
   ctx.fillText(rightSub, W - 14, 40);
 
   if (p) {
@@ -487,11 +490,12 @@ export function drawSession(ctx, session, t, stick, bestScore) {
 
   const inWorld = session.screen === 'play'
     || session.screen === 'levelup'
+    || session.screen === 'allocate'
     || session.screen === 'clear'
     || session.screen === 'over'
     || session.screen === 'select';
 
-  if (session.screen === 'menu' || session.screen === 'select') {
+  if (session.screen === 'menu' || session.screen === 'select' || session.screen === 'allocate') {
     drawIdleDecor(ctx, t);
   } else if (inWorld && session.player) {
     drawBackground(ctx, cam);
@@ -510,7 +514,7 @@ export function drawSession(ctx, session, t, stick, bestScore) {
     const stageLabel = session.level
       ? `${session.level.order}. ${session.level.name}`
       : ('STAGE ' + (session.wave || 1));
-    let phaseLabel = 'LV ' + (session.player ? session.player.level : 1);
+    let phaseLabel = '';
     if (session.levelPhase === 'boss') phaseLabel = 'BOSS';
     else if (session.isGateOpen?.()) phaseLabel = 'GATE OPEN';
 
@@ -519,12 +523,16 @@ export function drawSession(ctx, session, t, stick, bestScore) {
       session.player,
       session.score,
       Math.max(bestScore, Math.floor(session.score)),
-      { stageLabel, phaseLabel },
+      {
+        stageLabel,
+        phaseLabel,
+        unspentPoints: session.meta ? session.meta.unspentPoints : 0,
+      },
     );
     if (session.screen === 'play' || session.screen === 'levelup') drawControls(ctx, stick);
   } else {
     drawIdleDecor(ctx, t);
   }
-  if (session.screen === 'levelup') drawLevelUpOverlay(ctx, session.levelChoices);
+  // Blessing-card overlay retired (P3 RPG allocate is DOM).
   ctx.restore();
 }

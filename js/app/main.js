@@ -8,6 +8,7 @@ import {
 import { resizeCanvas } from '../core/math.js';
 import { GameSession } from '../world/GameSession.js';
 import { listLevels } from '../domain/levels.js';
+import { ATTR_KEYS, ATTR_INFO } from '../domain/rpg.js';
 import { createSaveStore } from '../adapters/save.js';
 import { createAudio } from '../adapters/audio.js';
 import { loadAllSprites } from '../adapters/sprites.js';
@@ -41,9 +42,17 @@ function setScreen(name) {
 }
 
 function updateMenuStats() {
+  const meta = saveStore.getMeta();
   document.getElementById('statBest').textContent = String(saveStore.data.best);
-  document.getElementById('statGames').textContent = String(saveStore.data.games);
+  const heroEl = document.getElementById('statHeroLv');
+  if (heroEl) heroEl.textContent = String(meta.level);
   document.getElementById('statWave').textContent = String(saveStore.data.bestWave);
+  const rpgLine = document.getElementById('menuRpgLine');
+  if (rpgLine) {
+    rpgLine.textContent =
+      `Unspent points: ${meta.unspentPoints} · XP ${meta.xp}` +
+      (meta.unspentPoints > 0 ? ' · spend after a clear' : '');
+  }
   const muteBtn = document.getElementById('muteBtn');
   if (muteBtn) muteBtn.textContent = saveStore.data.muted ? '🔇 Sound off' : '🔊 Sound on';
 }
@@ -64,21 +73,26 @@ function populateLevelList() {
   const list = document.getElementById('levelList');
   if (!list) return;
   list.innerHTML = '';
+  const meta = session.meta || saveStore.getMeta();
   for (const lvl of listLevels()) {
+    const unlocked = session.isStageUnlocked(lvl.order);
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'level-btn';
+    btn.className = 'level-btn' + (unlocked ? '' : ' locked');
     btn.dataset.levelId = lvl.id;
+    btn.disabled = !unlocked;
     btn.innerHTML =
-      `<span class="level-order">${lvl.order}</span>` +
+      `<span class="level-order">${unlocked ? lvl.order : '🔒'}</span>` +
       `<span class="level-meta">` +
       `<strong>${lvl.name}</strong>` +
-      `<small>${lvl.subtitle}${lvl.stub ? ' · stub' : ''}</small>` +
+      `<small>${unlocked ? lvl.subtitle : 'Clear previous stage to unlock'}</small>` +
       `</span>`;
-    btn.addEventListener('click', () => {
-      audio.click();
-      showPlay(lvl.id);
-    });
+    if (unlocked) {
+      btn.addEventListener('click', () => {
+        audio.click();
+        showPlay(lvl.id);
+      });
+    }
     list.appendChild(btn);
   }
 }
@@ -94,6 +108,14 @@ function showPlay(levelId) {
   audio.ensure();
   lastLevelId = levelId || lastLevelId;
   session.startRun(lastLevelId);
+  if (session.screen !== 'play') {
+    // locked / missing — fall back to first unlocked
+    const first = listLevels().find(l => session.isStageUnlocked(l.order));
+    if (first) {
+      lastLevelId = first.id;
+      session.startRun(first.id);
+    }
+  }
   input.resetStick();
   setScreen('play');
 }
@@ -119,6 +141,47 @@ function showOver() {
   }
 }
 
+function refreshAllocateUi() {
+  const ptsEl = document.getElementById('allocPoints');
+  const list = document.getElementById('allocList');
+  if (!ptsEl || !list || !session.meta) return;
+  const unspent = session.meta.unspentPoints;
+  ptsEl.textContent = `Unspent points: ${unspent}`;
+  list.innerHTML = '';
+  for (const key of ATTR_KEYS) {
+    const info = ATTR_INFO[key];
+    const val = session.meta.stats[key] || 0;
+    const row = document.createElement('div');
+    row.className = 'alloc-row';
+    row.innerHTML =
+      `<div class="alloc-info">` +
+      `<div class="alloc-name">${info.name} · ${info.label}</div>` +
+      `<div class="alloc-desc">${info.desc}</div>` +
+      `</div>` +
+      `<span class="alloc-val">${val}</span>`;
+    const plus = document.createElement('button');
+    plus.type = 'button';
+    plus.className = 'alloc-plus';
+    plus.textContent = '+';
+    plus.disabled = unspent <= 0;
+    plus.addEventListener('click', () => {
+      audio.ensure();
+      if (session.allocateAttr(key)) {
+        audio.click();
+        refreshAllocateUi();
+      }
+    });
+    row.appendChild(plus);
+    list.appendChild(row);
+  }
+}
+
+function showAllocate() {
+  input.resetStick();
+  refreshAllocateUi();
+  setScreen('allocate');
+}
+
 function showClear() {
   input.resetStick();
   setScreen('clear');
@@ -132,6 +195,10 @@ function showClear() {
   }
   document.getElementById('clearScore').textContent = String(Math.floor(session.score));
   document.getElementById('clearKills').textContent = String(session.kills);
+  const lvEl = document.getElementById('clearHeroLv');
+  if (lvEl) lvEl.textContent = String(session.meta?.level || 1);
+  const ptsEl = document.getElementById('clearPoints');
+  if (ptsEl) ptsEl.textContent = String(session.meta?.unspentPoints || 0);
 
   const next = session.getNextLevel();
   const btnNext = document.getElementById('btnNextLevel');
@@ -157,26 +224,27 @@ const input = createInput(stage, cv, {
   ensureAudio: () => audio.ensure(),
   onJumpHeld: h => session.setJumpHeld(h),
   onPointerDown(e, api) {
+    // Legacy canvas level-up cards no longer used mid-stage
     if (session.screen === 'levelup') {
-      audio.ensure();
-      const idx = levelUpHitTest(e.clientY, api.canvasRect(), session.levelChoices);
-      if (idx >= 0 && session.levelChoices[idx]) {
-        e.preventDefault();
-        session.applyUpgrade(session.levelChoices[idx]);
-        if (session.screen === 'play') setScreen('play');
-        return true;
-      }
+      e.preventDefault();
+      session.applyUpgrade();
+      if (session.screen === 'play') setScreen('play');
       return true;
     }
     return false;
   },
   onKeyDown(e) {
-    if (session.screen === 'levelup') {
-      const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= session.levelChoices.length) {
+    if (session.screen === 'allocate') {
+      if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        session.applyUpgrade(session.levelChoices[n - 1]);
-        if (session.screen === 'play') setScreen('play');
+        session.finishAllocate();
+        showClear();
+      }
+      // 1–6 spend into attr order
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= ATTR_KEYS.length) {
+        e.preventDefault();
+        if (session.allocateAttr(ATTR_KEYS[n - 1])) refreshAllocateUi();
       }
       return;
     }
@@ -215,17 +283,14 @@ function frame(now) {
   const t = now / 1000;
   if (!ctx) ({ ctx } = resizeCanvas(cv, W, H));
 
-  const prevScreen = session.screen;
   if (session.screen === 'play') {
     session.update(dt, input.poll());
     if (session.screen === 'over') showOver();
+    else if (session.screen === 'allocate') showAllocate();
     else if (session.screen === 'clear') showClear();
   }
 
   drawSession(ctx, session, t, input.stick, saveStore.data.best);
-
-  // Keep DOM overlay in sync if level-up opened mid-frame
-  if (session.screen === 'levelup' && prevScreen === 'play') setScreen('levelup');
 
   requestAnimationFrame(frame);
 }
@@ -248,6 +313,11 @@ document.getElementById('btnNextLevel').addEventListener('click', () => {
   if (next) showPlay(next.id);
   else showMenu();
 });
+document.getElementById('btnAllocDone').addEventListener('click', () => {
+  audio.click();
+  session.finishAllocate();
+  showClear();
+});
 document.getElementById('btnPauseMenu').addEventListener('click', e => {
   e.stopPropagation();
   audio.click();
@@ -261,7 +331,7 @@ document.getElementById('muteBtn').addEventListener('click', () => {
 
 function applyVersionLabels() {
   const label = GAME_NAME + ' ' + GAME_VERSION_LABEL;
-  for (const id of ['versionTag', 'versionMenu', 'versionOver', 'versionSelect', 'versionClear']) {
+  for (const id of ['versionTag', 'versionMenu', 'versionOver', 'versionSelect', 'versionClear', 'versionAlloc']) {
     const el = document.getElementById(id);
     if (!el) continue;
     if (id === 'versionMenu' || id === 'versionSelect') el.textContent = label + ' · PWA ready';
@@ -272,7 +342,7 @@ function applyVersionLabels() {
 
 function safeReloadForUpdate() {
   if (window.__reloaded) return;
-  if (session.screen === 'play' || session.screen === 'levelup') {
+  if (session.screen === 'play' || session.screen === 'levelup' || session.screen === 'allocate') {
     window.__pendingReload = true;
     return;
   }

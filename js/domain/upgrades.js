@@ -1,38 +1,29 @@
 /**
- * Domain: run-time combat stats + blessing cards (current endless model).
- * Future RPG attributes will live alongside this, not inside combat.js.
+ * Domain: run-time combat stats.
+ *
+ * Blessing cards (pick 1 of 3) are retired for campaign RPG —
+ * use domain/rpg.js attributes between stages instead.
+ * defaultStats remains for tests / fallbacks.
  */
 
 import { PLAYER_SWORD } from '../config/index.js';
-import { shuffle } from '../core/math.js';
-import { UPGRADES } from '../config/index.js';
+import { attrsToCombatStats, defaultAttrs } from './rpg.js';
 
+/** Base combat stats (no attributes invested). */
 export function defaultStats() {
-  return {
-    damage: PLAYER_SWORD.attackDamage,
-    attackRate: 1,
-    speedMul: 1,
-    jumpMul: 1,
-    rangeMul: 1,
-  };
-}
-
-export function pickLevelUpChoices(player) {
-  const owned = player._owned || (player._owned = {});
-  const pool = UPGRADES.filter(u => {
-    if (u.id === 'heal') return player.hp < player.maxHp;
-    const c = owned[u.id] || 0;
-    if (u.max != null && c >= u.max) return false;
-    return true;
-  });
-  shuffle(pool);
-  const choices = pool.slice(0, 3);
-  while (choices.length < 3) choices.push(UPGRADES[0]);
-  return choices;
+  return attrsToCombatStats(defaultAttrs());
 }
 
 /**
- * Apply one blessing. Mutates player + stats.
+ * @deprecated Campaign uses persistent RPG allocate between levels.
+ * Kept so older tests / tooling can still import the shape.
+ */
+export function pickLevelUpChoices() {
+  return [];
+}
+
+/**
+ * @deprecated Prefer allocatePoint in domain/rpg.js.
  */
 export function applyUpgradeToRun(player, stats, up) {
   if (!up || !player || !stats) return;
@@ -53,3 +44,6 @@ export function applyUpgradeToRun(player, stats, up) {
       break;
   }
 }
+
+// re-export for convenience
+export { attrsToCombatStats, defaultAttrs };

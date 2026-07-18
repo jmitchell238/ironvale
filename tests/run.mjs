@@ -30,8 +30,10 @@ const combat = await import(js('js/domain/combat.js'));
 const enemyAi = await import(js('js/domain/enemyAi.js'));
 const platforms = await import(js('js/domain/platforms.js'));
 const levels = await import(js('js/domain/levels.js'));
+const rpg = await import(js('js/domain/rpg.js'));
 const { GameSession } = await import(js('js/world/GameSession.js'));
 const upgrades = await import(js('js/domain/upgrades.js'));
+const { createMemorySave } = await import(js('js/adapters/save.js'));
 
 const {
   GAME_VERSION, PLAYER, PLAYER_BODY, PLAYER_SWORD, PLAYER_DRAW, PLAYER_MOVE,
@@ -48,13 +50,14 @@ const {
 } = enemyAi;
 const { makePlatform, platformsChainReachable, canReachPlatform } = platforms;
 
-function createSession() {
+/** Default test save unlocks all prototype stages so level-content tests can load freely. */
+function createSession(saveSeed = {}) {
   return new GameSession({
     audio: {
       slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
       levelUp() {}, gameOver() {}, upgrade() {}, explode() {}, click() {},
     },
-    save: { recordGameEnd() {}, data: { best: 0, games: 0, bestWave: 0, totalKills: 0, muted: false } },
+    save: createMemorySave({ levelUnlocked: 3, ...saveSeed }),
   });
 }
 
@@ -69,6 +72,7 @@ section('PWA shell + architecture layout');
   assert(exists('js/domain/platforms.js'), 'domain/platforms');
   assert(exists('js/domain/player.js'), 'domain/player');
   assert(exists('js/domain/levels.js'), 'domain/levels');
+  assert(exists('js/domain/rpg.js'), 'domain/rpg');
   assert(exists('js/adapters/render.js'), 'adapters/render');
   assert(exists('ARCHITECTURE.md'), 'ARCHITECTURE.md');
   const html = read('index.html');
@@ -76,6 +80,7 @@ section('PWA shell + architecture layout');
   assert(html.includes('js/app/main.js'), 'entry is app/main');
   assert(html.includes('data-screen="select"'), 'level select screen');
   assert(html.includes('data-screen="clear"'), 'level clear screen');
+  assert(html.includes('data-screen="allocate"'), 'allocate screen');
   assert(!html.includes('js/game.js'), 'legacy game.js not loaded');
   assert(!exists('js/game.js') || true, 'legacy optional');
 }
@@ -86,6 +91,7 @@ section('version ↔ SW');
   assert(read('sw.js').includes('js/world/GameSession.js'), 'SW caches session');
   assert(read('sw.js').includes('js/domain/combat.js'), 'SW caches combat');
   assert(read('sw.js').includes('js/domain/levels.js'), 'SW caches levels');
+  assert(read('sw.js').includes('js/domain/rpg.js'), 'SW caches rpg');
 }
 
 section('config concern split');
@@ -225,7 +231,7 @@ section('platforms');
   assert(canReachPlatform(makePlatform(0, GROUND_Y, 100), makePlatform(40, GROUND_Y, 100), 1, 1), 'adjacent ok');
 }
 
-section('session combat + levelup');
+section('session combat + XP banks points (no mid-stage allocate)');
 {
   const s = createSession();
   s.startRun();
@@ -236,10 +242,11 @@ section('session combat + levelup');
   s.doAttack();
   if (s.enemies.length) { e.hp = 0; s.killEnemy(e, 0); }
   assert(s.kills >= 1, 'kill');
-  s.addXp(s.player.xpNext);
-  assertEq(s.screen, 'levelup', 'levelup');
-  s.applyUpgrade(UPGRADES.find(u => u.id === 'dmg'));
-  assert(s.stats.damage > PLAYER_SWORD.attackDamage, 'dmg up');
+  const need = s.player.xpNext;
+  s.addXp(need);
+  assertEq(s.screen, 'play', 'stays in play');
+  assert(s.meta.unspentPoints >= 1, 'point banked');
+  assert(s.meta.level >= 2, 'hero leveled');
 }
 
 section('session mid-range + jump attack');
@@ -379,12 +386,16 @@ section('encounters + gate + boss + clear');
   assert(s.arena, 'arena set');
   assert(s.enemies.some(e => e.isBoss), 'boss present');
   assert(s.enemies.some(e => e.type === 'bandit_captain'), 'captain type');
-  // Defeat boss
+  // Defeat boss → allocate if points banked, else clear
   const boss = s.enemies.find(e => e.isBoss);
   const bi = s.enemies.indexOf(boss);
   s.killEnemy(boss, bi);
-  assertEq(s.screen, 'clear', 'clear screen');
+  assert(s.screen === 'allocate' || s.screen === 'clear', 'allocate or clear');
   assert(s.bossDefeated, 'boss down');
+  if (s.screen === 'allocate') {
+    s.finishAllocate();
+    assertEq(s.screen, 'clear', 'clear after allocate');
+  }
 }
 
 section('pure telegraphed slam (war-chief)');
@@ -464,6 +475,8 @@ section('Ruined Road prototype (P2 L2)');
   assert(s.enemies.some(e => e.type === 'skeleton_champion'), 'champion type');
   const boss = s.enemies.find(e => e.isBoss);
   s.killEnemy(boss, s.enemies.indexOf(boss));
+  assert(s.screen === 'allocate' || s.screen === 'clear', 'allocate or clear');
+  if (s.screen === 'allocate') s.finishAllocate();
   assertEq(s.screen, 'clear', 'clear screen');
 }
 
@@ -512,6 +525,8 @@ section('Iron Gate prototype (P2 L3)');
   // No next stage → campaign prototype complete
   assertEq(s.getNextLevel(), null, 'campaign clear after L3');
   s.killEnemy(boss, s.enemies.indexOf(boss));
+  assert(s.screen === 'allocate' || s.screen === 'clear', 'allocate or clear');
+  if (s.screen === 'allocate') s.finishAllocate();
   assertEq(s.screen, 'clear', 'clear screen');
 }
 
@@ -524,12 +539,103 @@ section('fail screen');
   assert(s.overReason.length > 0, 'reason');
 }
 
-section('upgrades pure');
+section('upgrades pure (fallback)');
 {
   const stats = upgrades.defaultStats();
+  assertEq(stats.damage, PLAYER_SWORD.attackDamage, 'base dmg');
   const p = { hp: 50, maxHp: 100, _owned: {} };
   upgrades.applyUpgradeToRun(p, stats, UPGRADES.find(u => u.id === 'dmg'));
-  assert(stats.damage > PLAYER_SWORD.attackDamage, 'pure dmg');
+  assert(stats.damage > PLAYER_SWORD.attackDamage, 'legacy dmg');
+}
+
+section('pure RPG domain');
+{
+  const meta = rpg.defaultMeta();
+  assertEq(meta.level, 1, 'start lv');
+  assertEq(meta.unspentPoints, 0, 'no points');
+  assertEq(meta.levelUnlocked, 1, 'L1 unlocked');
+  const need = rpg.xpToNext(1);
+  const r = rpg.applyXp(meta, need);
+  assert(r.levelsGained >= 1, 'gained level');
+  assertEq(meta.unspentPoints, r.pointsGained, 'banked');
+  assert(rpg.allocatePoint(meta, 'str'), 'alloc str');
+  assertEq(meta.stats.str, 1, 'str 1');
+  assertEq(meta.unspentPoints, r.pointsGained - 1, 'spent');
+  assert(!rpg.allocatePoint(meta, 'nope'), 'bad key');
+  const combat = rpg.attrsToCombatStats(meta.stats);
+  assert(combat.damage > PLAYER_SWORD.attackDamage, 'str → dmg');
+  const hp = rpg.attrsToMaxHp({ ...rpg.defaultAttrs(), vit: 2 });
+  assert(hp > PLAYER_MOVE.maxHp, 'vit → hp');
+  rpg.unlockAfterClear(meta, 1, 3);
+  assertEq(meta.levelUnlocked, 2, 'unlock L2');
+  assert(rpg.isLevelUnlocked(meta, 2), 'L2 open');
+  assert(!rpg.isLevelUnlocked(meta, 3), 'L3 locked');
+}
+
+section('session RPG: allocate between levels + unlock + persist');
+{
+  const save = createMemorySave({ levelUnlocked: 1 });
+  const s = new GameSession({
+    audio: {
+      slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
+      levelUp() {}, gameOver() {}, upgrade() {}, explode() {}, click() {},
+    },
+    save,
+  });
+  assert(s.loadLevel('outer-vale'), 'load L1');
+  assert(!s.loadLevel('ruined-road'), 'L2 locked');
+  // Bank points mid-stage without leaving play
+  s.loadLevel('outer-vale');
+  s.addXp(rpg.xpToNext(s.meta.level));
+  assertEq(s.screen, 'play', 'no mid allocate');
+  assert(s.meta.unspentPoints >= 1, 'banked mid');
+  // Clear → allocate when unspent
+  s.enemies.length = 0;
+  for (const enc of s.level.encounters) s.firedEncounters.add(enc.id);
+  s.player.x = s.level.gateX + 10;
+  s.updateLevelProgress();
+  const boss = s.enemies.find(e => e.isBoss);
+  assert(boss, 'boss up');
+  s.killEnemy(boss, s.enemies.indexOf(boss));
+  assertEq(s.screen, 'allocate', 'allocate between levels');
+  assert(s.meta.levelUnlocked >= 2, 'unlocked L2');
+  assert(s.allocateAttr('str'), 'spend str');
+  assert(s.stats.damage > PLAYER_SWORD.attackDamage, 'dmg applied');
+  s.finishAllocate();
+  assertEq(s.screen, 'clear', 'clear after allocate');
+  // Persist round-trip
+  const s2 = new GameSession({
+    audio: {
+      slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
+      levelUp() {}, gameOver() {}, upgrade() {}, explode() {}, click() {},
+    },
+    save,
+  });
+  assert(s2.loadLevel('ruined-road'), 'L2 unlocked after clear');
+  assert(s2.meta.stats.str >= 1, 'str persisted');
+  assert(s2.stats.damage > PLAYER_SWORD.attackDamage, 'combat from save');
+}
+
+section('session clear without banked points → clear screen');
+{
+  const s = createSession({ unspentPoints: 0, level: 1, xp: 0 });
+  s.loadLevel('outer-vale');
+  // Force zero unspent after clear bonus by allocating any banked after bonus? 
+  // Clear bonus may level up — ensure we finish allocate path:
+  // Use high starting level with zero unspent and huge xpNext, tiny clear bonus.
+  s.meta.unspentPoints = 0;
+  s.meta.level = 50;
+  s.meta.xp = 0;
+  s.clearBonusApplied = false;
+  s.levelPhase = 'boss';
+  s.bossSpawned = true;
+  s.bossDefeated = false;
+  // Direct clear without addXp path that levels: zero clear bonus
+  const bonus = s.level.clearBonus;
+  s.level.clearBonus = 0;
+  s.clearLevel();
+  s.level.clearBonus = bonus;
+  assertEq(s.screen, 'clear', 'clear when no points');
 }
 
 console.log(`\n\n${passed} passed, ${failed} failed`);
