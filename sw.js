@@ -1,9 +1,22 @@
-const CACHE = 'ironvale-1.0.000';
+const CACHE = 'ironvale-1.2.000';
 
 const ASSETS = [
   './', './index.html', './css/style.css',
-  './js/config.js', './js/save.js', './js/util.js', './js/audio.js',
-  './js/sprites.js', './js/game.js', './js/render.js', './js/main.js',
+  './js/app/main.js',
+  './js/config/index.js',
+  './js/core/math.js',
+  './js/domain/combat.js',
+  './js/domain/enemyAi.js',
+  './js/domain/platforms.js',
+  './js/domain/player.js',
+  './js/domain/upgrades.js',
+  './js/domain/levels.js',
+  './js/world/GameSession.js',
+  './js/adapters/save.js',
+  './js/adapters/audio.js',
+  './js/adapters/sprites.js',
+  './js/adapters/render.js',
+  './js/adapters/input.js',
   './manifest.webmanifest',
   './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
   './apple-touch-icon.png', './art/cover.jpg',
@@ -12,6 +25,7 @@ const ASSETS = [
   './assets/sprites/player/run.png',
   './assets/sprites/player/jump.png',
   './assets/sprites/player/attack.png',
+  './assets/sprites/player/jump_attack.png',
   './assets/sprites/player/dead.png',
   './assets/sprites/player/logo.png',
   './assets/sprites/enemies/slime.png',

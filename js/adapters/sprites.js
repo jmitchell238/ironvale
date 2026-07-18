@@ -1,12 +1,13 @@
-'use strict';
+/** Adapter: sprite sheet loading + draw. */
 
-const SPRITE_MANIFEST = {
+export const SPRITE_MANIFEST = {
   'player/idle':   { src: 'assets/sprites/player/idle.png',   fw: 64, fh: 72, frames: 10, fps: 5 },
   'player/walk':   { src: 'assets/sprites/player/walk.png',   fw: 64, fh: 72, frames: 10, fps: 6 },
   'player/run':    { src: 'assets/sprites/player/run.png',    fw: 64, fh: 72, frames: 10, fps: 7 },
   'player/jump':   { src: 'assets/sprites/player/jump.png',   fw: 64, fh: 72, frames: 10, fps: 6 },
-  'player/attack': { src: 'assets/sprites/player/attack.png', fw: 64, fh: 72, frames: 10, fps: 14 },
-  'player/dead':   { src: 'assets/sprites/player/dead.png',   fw: 64, fh: 72, frames: 10, fps: 6 },
+  'player/attack':      { src: 'assets/sprites/player/attack.png',      fw: 64, fh: 72, frames: 10, fps: 14 },
+  'player/jump_attack': { src: 'assets/sprites/player/jump_attack.png', fw: 64, fh: 72, frames: 10, fps: 14 },
+  'player/dead':        { src: 'assets/sprites/player/dead.png',        fw: 64, fh: 72, frames: 10, fps: 6 },
 
   'enemy/slime':    { src: 'assets/sprites/enemies/slime.png',    fw: 32, fh: 32, frames: 4, fps: 5 },
   'enemy/bandit':   { src: 'assets/sprites/enemies/bandit.png',   fw: 40, fh: 48, frames: 4, fps: 5 },
@@ -22,7 +23,6 @@ const SPRITE_MANIFEST = {
 };
 
 const spriteCache = Object.create(null);
-let spritesReady = false;
 let spritesLoadPromise = null;
 
 function loadImage(src) {
@@ -34,7 +34,7 @@ function loadImage(src) {
   });
 }
 
-function loadAllSprites() {
+export function loadAllSprites() {
   if (spritesLoadPromise) return spritesLoadPromise;
   spritesLoadPromise = Promise.all(Object.entries(SPRITE_MANIFEST).map(async ([key, meta]) => {
     try {
@@ -44,23 +44,21 @@ function loadAllSprites() {
       console.warn('[sprites]', e.message);
       spriteCache[key] = { img: null, meta, ready: false };
     }
-  })).then(() => {
-    spritesReady = Object.values(spriteCache).some(s => s.ready);
-    return spritesReady;
-  });
+  })).then(() => Object.values(spriteCache).some(s => s.ready));
   return spritesLoadPromise;
 }
 
-function getSprite(key) { return spriteCache[key] || null; }
+export function getSprite(key) {
+  return spriteCache[key] || null;
+}
 
-function animFrame(meta, time, speedMul) {
+export function animFrame(meta, time, speedMul) {
   const fps = (meta.fps || 6) * (speedMul || 1);
   const n = meta.frames || 1;
   return Math.floor(time * fps) % n;
 }
 
-function drawSprite(ctx, key, frame, x, y, opts) {
-  opts = opts || {};
+export function drawSprite(ctx, key, frame, x, y, opts = {}) {
   const entry = spriteCache[key];
   if (!entry || !entry.ready || !entry.img) return false;
   const meta = entry.meta;
@@ -87,7 +85,7 @@ function drawSprite(ctx, key, frame, x, y, opts) {
   return true;
 }
 
-function drawImageKey(ctx, key, dx, dy, dw, dh) {
+export function drawImageKey(ctx, key, dx, dy, dw, dh) {
   const entry = spriteCache[key];
   if (!entry || !entry.ready || !entry.img) return false;
   ctx.imageSmoothingEnabled = false;

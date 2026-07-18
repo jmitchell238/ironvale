@@ -1,6 +1,6 @@
 # Ironvale
 
-Medieval **2D platformer** — run, jump, and sword-slash through the realm of Ironvale. Survive waves of slimes, bandits, skeletons, and ogres; collect gold XP and pick blessings as you level up.
+Medieval **2D platformer** — run, jump, and sword-slash through discrete stages of Ironvale. Clear encounters, open the end gate, defeat the stage boss, and advance the campaign.
 
 **Play:** https://jmitchell238.github.io/ironvale/
 
@@ -18,19 +18,33 @@ Medieval **2D platformer** — run, jump, and sword-slash through the realm of I
 
 - Knight character art (GameArt2D free sprite)
 - Gravity, coyote time, variable jump
-- Single-jump-reachable procedural platforms
-- Melee combat, coins/XP, level-up upgrades
-- Escalating waves + bosses
+- Campaign stages with authored layouts (stubs for prototypes)
+- Melee combat, coins/XP, level-up blessings (interim)
+- End gate → boss arena → stage clear
 - Installable PWA
+
+## Architecture
+
+Layered ES modules — see **[ARCHITECTURE.md](./ARCHITECTURE.md)**.
+
+```
+app → adapters → world/GameSession → domain → config/core
+```
+
+Sword length, body size, and draw scale are separate config axes so changing one does not break the others.
 
 ## Tests
 
 ```bash
-node tests/run.mjs
+npm test
+# or: node tests/run.mjs
 ```
 
 ## Local
 
 ```bash
-python3 -m http.server 8080
+npm start
+# or: python3 -m http.server 8080
 ```
+
+Requires HTTP (ES modules).

@@ -48,6 +48,8 @@ html, body {
 }
 
 .screen[data-screen="menu"],
+.screen[data-screen="select"],
+.screen[data-screen="clear"],
 .screen[data-screen="over"] {
   display: flex; align-items: center; justify-content: center;
   padding: 16px;
@@ -152,4 +154,51 @@ button.ghost {
   position: absolute; left: 0; right: 0; bottom: 28px; margin: 0;
   text-align: center; font-size: 0.72rem;
   color: rgba(245, 230, 200, 0.4); pointer-events: none;
+}
+
+.clear-title { color: var(--gold); }
+
+.level-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 0 0 14px; max-height: 340px; overflow-y: auto;
+  text-align: left;
+}
+
+.level-btn {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; margin: 0; padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-align: left; cursor: pointer;
+  font: inherit;
+}
+.level-btn:active { transform: scale(0.98); }
+.level-btn:hover {
+  border-color: rgba(201, 162, 39, 0.55);
+  background: rgba(201, 162, 39, 0.08);
+}
+
+.level-order {
+  flex: 0 0 32px; width: 32px; height: 32px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(201, 162, 39, 0.18);
+  color: var(--gold); font-weight: 800; font-size: 0.95rem;
+}
+
+.level-meta {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.level-meta strong {
+  font-size: 0.98rem; font-weight: 800; line-height: 1.2;
+}
+.level-meta small {
+  color: var(--muted); font-size: 0.75rem; line-height: 1.25;
+}
+
+button.primary:disabled {
+  opacity: 0.55; cursor: default;
+  box-shadow: none;
 }

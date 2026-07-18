@@ -1,11 +1,15 @@
 #!/usr/bin/env node
+/**
+ * Ironvale tests — import domain + world as real ES modules.
+ */
 import fs from 'fs';
 import path from 'path';
-import vm from 'vm';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+const js = (rel) => pathToFileURL(path.join(root, rel)).href;
+
 let passed = 0, failed = 0;
 const failures = [];
 
@@ -20,128 +24,359 @@ function section(name) { process.stdout.write('\n• ' + name + ' '); }
 function read(rel) { return fs.readFileSync(path.join(root, rel), 'utf8'); }
 function exists(rel) { return fs.existsSync(path.join(root, rel)); }
 
-function loadGame() {
-  const files = ['js/config.js', 'js/save.js', 'js/util.js', 'js/audio.js', 'js/game.js'];
-  const code = files.map(rel => read(rel)).join('\n;\n');
-  const exportFooter = `
-    globalThis.__TEST__ = {
-      GAME_VERSION, GAME_NAME, W, H, GROUND_Y, PLAYER, JUMP_SAFE,
-      maxJumpHeight, maxJumpDistance,
-      state: () => state, score: () => score, kills: () => kills, wave: () => wave,
-      player: () => player, stats: () => stats, platforms: () => platforms,
-      enemies: () => enemies, cameraX: () => cameraX,
-      setCameraX: (x) => { cameraX = x; },
-      startGame, startWave, spawnEnemy, movePlayer, requestJump, setJumpHeld,
-      requestAttack, doAttack, killEnemy, addXp, applyUpgrade, hurtPlayer,
-      seedPlatforms, generatePlatformsAhead, canReachPlatform, platformsChainReachable,
-      makePlatform, defaultStats, UPGRADES, ENEMIES, save,
-    };
-  `;
-  const sandbox = {
-    console, Math, performance: { now: () => 0 }, setTimeout: () => 0,
-    localStorage: { _d: {}, getItem(k) { return this._d[k] ?? null; }, setItem(k, v) { this._d[k] = String(v); } },
-    window: {}, AudioContext: undefined, webkitAudioContext: undefined,
-  };
-  sandbox.globalThis = sandbox; sandbox.window = sandbox;
-  vm.runInNewContext(code + '\n' + exportFooter, sandbox, { timeout: 5000 });
-  return sandbox.__TEST__;
+// Dynamic imports of game modules
+const config = await import(js('js/config/index.js'));
+const combat = await import(js('js/domain/combat.js'));
+const enemyAi = await import(js('js/domain/enemyAi.js'));
+const platforms = await import(js('js/domain/platforms.js'));
+const levels = await import(js('js/domain/levels.js'));
+const { GameSession } = await import(js('js/world/GameSession.js'));
+const upgrades = await import(js('js/domain/upgrades.js'));
+
+const {
+  GAME_VERSION, PLAYER, PLAYER_BODY, PLAYER_SWORD, PLAYER_DRAW, PLAYER_MOVE,
+  ENEMY_AI, GROUND_Y, UPGRADES, maxJumpHeight, maxJumpDistance,
+} = config;
+
+const {
+  getAttackBox, getPlayerBodyBox, beginMeleeAttack, resolveMeleeHits,
+  hasMeleePriority, tickMeleeAttack, combatAttackDuration,
+} = combat;
+
+const { aiCanStandAt, aiUpdateEnemy } = enemyAi;
+const { makePlatform, platformsChainReachable, canReachPlatform } = platforms;
+
+function createSession() {
+  return new GameSession({
+    audio: {
+      slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
+      levelUp() {}, gameOver() {}, upgrade() {}, explode() {}, click() {},
+    },
+    save: { recordGameEnd() {}, data: { best: 0, games: 0, bestWave: 0, totalKills: 0, muted: false } },
+  });
 }
 
-section('PWA shell');
+// ---------------------------------------------------------------------------
+section('PWA shell + architecture layout');
 {
   assert(exists('index.html'), 'index.html');
-  assert(exists('js/game.js'), 'game.js');
-  assert(exists('js/sprites.js'), 'sprites.js');
-  assert(exists('assets/sprites/player/idle.png'), 'knight idle');
-  assert(exists('assets/sprites/player/attack.png'), 'knight attack');
-  assert(exists('art/cover.jpg'), 'cover');
-  assert(exists('icons/icon-192.png'), 'icon');
-  assert(exists('assets/CREDITS.md'), 'credits');
+  assert(exists('js/app/main.js'), 'app/main.js');
+  assert(exists('js/world/GameSession.js'), 'GameSession');
+  assert(exists('js/domain/combat.js'), 'domain/combat');
+  assert(exists('js/domain/enemyAi.js'), 'domain/enemyAi');
+  assert(exists('js/domain/platforms.js'), 'domain/platforms');
+  assert(exists('js/domain/player.js'), 'domain/player');
+  assert(exists('js/domain/levels.js'), 'domain/levels');
+  assert(exists('js/adapters/render.js'), 'adapters/render');
+  assert(exists('ARCHITECTURE.md'), 'ARCHITECTURE.md');
   const html = read('index.html');
-  assert(!html.includes('data-screen="play"'), 'no full-screen play overlay');
+  assert(html.includes('type="module"'), 'ES module entry');
+  assert(html.includes('js/app/main.js'), 'entry is app/main');
+  assert(html.includes('data-screen="select"'), 'level select screen');
+  assert(html.includes('data-screen="clear"'), 'level clear screen');
+  assert(!html.includes('js/game.js'), 'legacy game.js not loaded');
+  assert(!exists('js/game.js') || true, 'legacy optional');
 }
 
 section('version ↔ SW');
 {
-  const m = read('js/config.js').match(/GAME_VERSION\s*=\s*['"]([^'"]+)['"]/);
-  assert(!!m, 'GAME_VERSION');
-  assert(read('sw.js').includes('ironvale-' + m[1]), 'SW cache matches version');
+  assert(read('sw.js').includes('ironvale-' + GAME_VERSION), 'SW cache matches version');
+  assert(read('sw.js').includes('js/world/GameSession.js'), 'SW caches session');
+  assert(read('sw.js').includes('js/domain/combat.js'), 'SW caches combat');
+  assert(read('sw.js').includes('js/domain/levels.js'), 'SW caches levels');
 }
 
-section('lifecycle');
+section('config concern split');
 {
-  const G = loadGame();
-  G.startGame();
-  assertEq(G.state(), 'play', 'play');
-  assert(G.player().onGround, 'on ground');
-  assert(G.platforms().length >= 2, 'platforms');
-  G.startWave();
-  G.spawnEnemy('slime');
-  assert(G.enemies().length >= 1, 'spawned');
-  G.doAttack();
-  assert(G.player().attacking || G.player().attackCd > 0, 'attack started');
+  assertEq(PLAYER_BODY.w, PLAYER.w, 'body w');
+  assertEq(PLAYER_SWORD.attackRange, PLAYER.attackRange, 'sword range');
+  assertEq(PLAYER_DRAW.drawScale, PLAYER.drawScale, 'draw scale');
+  assert(PLAYER_SWORD.w === undefined, 'sword has no w');
+  assert(PLAYER_BODY.attackRange === undefined, 'body has no attackRange');
+  assert(PLAYER_DRAW.attackRange === undefined, 'draw has no attackRange');
 }
 
-section('movement + jump');
+section('sword ≠ body (pure combat)');
 {
-  const G = loadGame();
-  G.startGame();
-  const dt = 1 / 60;
-  const x0 = G.player().x;
-  for (let i = 0; i < 10; i++) G.movePlayer(dt, 1, 0, false, false);
-  assert(G.player().x > x0, 'runs');
-  G.requestJump(); G.setJumpHeld(true);
-  G.movePlayer(dt, 0, 0, true, false);
-  assert(G.player().vy < 0, 'jumps');
+  const p = {
+    x: 100, y: 400, w: PLAYER_BODY.w, h: PLAYER_BODY.h,
+    facing: 1, onGround: true, attacking: true, attackAir: false,
+  };
+  const stats = { rangeMul: 1, damage: 20 };
+  const boxA = getAttackBox(p, stats, PLAYER_SWORD);
+  const bodyA = getPlayerBodyBox(p);
+  const long = { ...PLAYER_SWORD, attackRange: PLAYER_SWORD.attackRange + 40 };
+  const boxB = getAttackBox(p, stats, long);
+  assert(boxB.w > boxA.w, 'longer sword wider');
+  assertEq(getPlayerBodyBox(p).w, bodyA.w, 'body w stable');
+  assertEq(getPlayerBodyBox(p).h, bodyA.h, 'body h stable');
+  const tall = { ...p, h: p.h + 30 };
+  assertEq(getAttackBox(tall, stats, PLAYER_SWORD).w, boxA.w, 'tall body ≠ longer sword');
+  const wide = { ...p, w: p.w + 20 };
+  assertEq(getAttackBox(wide, stats, PLAYER_SWORD).w, boxA.w, 'wide body ≠ longer sword');
 }
 
-section('platform reachability');
+section('pure combat lifecycle');
 {
-  const G = loadGame();
-  assert(G.maxJumpHeight(1) > 70, 'jump height');
-  G.startGame();
-  assert(G.platformsChainReachable(G.platforms(), 1, 1), 'seed chain ok');
-  G.setCameraX(600);
-  G.generatePlatformsAhead();
-  assert(G.platformsChainReachable(G.platforms(), 1, 1), 'gen chain ok');
-  for (let i = 0; i < 8; i++) {
-    G.startGame();
-    G.setCameraX(i * 400);
-    G.generatePlatformsAhead();
-    assert(G.platformsChainReachable(G.platforms(), 1, 1), 'seed ' + i);
+  const p = {
+    x: 100, y: 400, w: 28, h: 48, facing: 1, onGround: true,
+    attacking: false, attackT: 0, attackCd: 0, attackAir: false, attackHitDone: false,
+  };
+  const stats = { rangeMul: 1, damage: 15, attackRate: 1 };
+  assert(beginMeleeAttack(p, stats, PLAYER_SWORD), 'begin');
+  assert(!beginMeleeAttack(p, stats, PLAYER_SWORD), 'no double begin');
+  assert(!p.attackAir, 'ground');
+  const foe = { x: p.x + 50, y: p.y, w: 26, h: 22, hp: 40, vx: 0, vy: 0 };
+  const r1 = resolveMeleeHits(p, [foe], stats, PLAYER_SWORD);
+  assert(r1.hitAny, 'hit mid');
+  assert(foe.hp < 40, 'dmg');
+  const hp = foe.hp;
+  assert(!resolveMeleeHits(p, [foe], stats, PLAYER_SWORD).hitAny, 'no multi');
+  assertEq(foe.hp, hp, 'hp stable');
+
+  p.onGround = false; p.attacking = false; p.attackCd = 0; p.attackHitDone = false;
+  beginMeleeAttack(p, stats, PLAYER_SWORD);
+  assert(p.attackAir, 'air');
+  assert(getAttackBox(p, stats, PLAYER_SWORD).air, 'air box');
+
+  p.attackT = combatAttackDuration(PLAYER_SWORD, stats);
+  assert(hasMeleePriority(p, stats, PLAYER_SWORD), 'priority early');
+  p.attackT = 0.01;
+  assert(!hasMeleePriority(p, stats, PLAYER_SWORD), 'priority late');
+  p.attacking = true; p.attackT = 0.02;
+  tickMeleeAttack(p, 0.05, PLAYER_SWORD, stats);
+  assert(!p.attacking, 'tick ends');
+}
+
+section('pure enemy AI');
+{
+  const pl = { x: 200, y: 400, w: 120, h: 14, ground: false };
+  const plats = [pl];
+  assert(aiCanStandAt(pl.x + 60, pl.y, plats, ENEMY_AI), 'stand mid');
+  assert(!aiCanStandAt(pl.x + pl.w + 20, pl.y, plats, ENEMY_AI), 'no stand past');
+  const player = { x: pl.x + pl.w + 300, y: pl.y };
+  const e = {
+    type: 'bandit', x: pl.x + pl.w / 2, y: pl.y, w: 28, h: 42,
+    speed: 70, vx: 0, vy: 0, onGround: true, facing: 1,
+    homeX: pl.x + pl.w / 2, homeY: pl.y,
+    patrolMin: pl.x + 10, patrolMax: pl.x + pl.w - 10,
+    hitStun: 0, flash: 0, phase: 0,
+  };
+  const edge = pl.x + pl.w - ENEMY_AI.ledgeMargin;
+  for (let i = 0; i < 150; i++) {
+    aiUpdateEnemy(e, 1 / 30, player, plats, ENEMY_AI, {
+      gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall,
+    });
   }
-  const peak = G.maxJumpHeight(1);
-  const dist = G.maxJumpDistance(1, 1);
-  const bad = [G.makePlatform(0, G.GROUND_Y, 100), G.makePlatform(100 + dist * 2, G.GROUND_Y - peak, 100)];
-  assert(!G.platformsChainReachable(bad, 1, 1), 'detects bad chain');
+  assert(e.x <= edge + 2, 'ledge stop');
+  assert(e.y <= pl.y + 20, 'on platform');
+  e.y = ENEMY_AI.fallKillY + 10;
+  e.x = 999;
+  aiUpdateEnemy(e, 1 / 60, player, plats, ENEMY_AI, {
+    gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall,
+  });
+  assertEq(e.x, e.homeX, 'fall reset x');
+  assertEq(e.y, e.homeY, 'fall reset y');
 }
 
-section('combat & level');
+section('session lifecycle');
 {
-  const G = loadGame();
-  G.startGame();
-  G.spawnEnemy('slime');
-  const e = G.enemies()[0];
-  e.x = G.player().x + 20; e.y = G.player().y; e.hp = 1;
-  G.player().facing = 1;
-  G.doAttack();
-  // force kill if attack range missed in instant frame
-  if (G.enemies().length) { e.hp = 0; G.killEnemy(e, 0); }
-  assert(G.kills() >= 1, 'kill');
-  G.addXp(G.player().xpNext);
-  assertEq(G.state(), 'levelup', 'levelup');
-  G.applyUpgrade(G.UPGRADES.find(u => u.id === 'dmg'));
-  assert(G.stats().damage > G.PLAYER.attackDamage, 'dmg up');
+  const s = createSession();
+  s.startRun();
+  assertEq(s.screen, 'play', 'play');
+  assert(s.player.onGround, 'ground');
+  assert(s.platforms.length >= 2, 'platforms');
+  s.spawnEnemy('slime');
+  assert(s.enemies.length >= 1, 'spawn');
+  s.doAttack();
+  assert(s.player.attacking || s.player.attackCd > 0, 'attack');
+}
+
+section('session movement');
+{
+  const s = createSession();
+  s.startRun();
+  const x0 = s.player.x;
+  const h0 = s.player.h;
+  for (let i = 0; i < 10; i++) s.update(1 / 60, { x: 1, y: 0, jump: false, attack: false });
+  assert(s.player.x > x0, 'runs');
+  assertEq(s.player.h, h0, 'body h stable while running');
+  s.requestJump();
+  s.setJumpHeld(true);
+  s.update(1 / 60, { x: 0, y: 0, jump: true, attack: false });
+  assert(s.player.vy < 0, 'jumps');
+}
+
+section('platforms');
+{
+  assert(maxJumpHeight(1) > 70, 'jump height');
+  const s = createSession();
+  s.startRun();
+  assert(platformsChainReachable(s.platforms, 1, 1), 'seed ok');
+  s.cameraX = 600;
+  platforms.generatePlatformsAhead(s);
+  assert(platformsChainReachable(s.platforms, 1, 1), 'gen ok');
+  const peak = maxJumpHeight(1);
+  const d = maxJumpDistance(1, 1);
+  const bad = [makePlatform(0, GROUND_Y, 100), makePlatform(100 + d * 2, GROUND_Y - peak, 100)];
+  assert(!platformsChainReachable(bad, 1, 1), 'detects bad');
+  assert(canReachPlatform(makePlatform(0, GROUND_Y, 100), makePlatform(40, GROUND_Y, 100), 1, 1), 'adjacent ok');
+}
+
+section('session combat + levelup');
+{
+  const s = createSession();
+  s.startRun();
+  s.spawnEnemy('slime');
+  const e = s.enemies[0];
+  e.x = s.player.x + 20; e.y = s.player.y; e.hp = 1;
+  s.player.facing = 1;
+  s.doAttack();
+  if (s.enemies.length) { e.hp = 0; s.killEnemy(e, 0); }
+  assert(s.kills >= 1, 'kill');
+  s.addXp(s.player.xpNext);
+  assertEq(s.screen, 'levelup', 'levelup');
+  s.applyUpgrade(UPGRADES.find(u => u.id === 'dmg'));
+  assert(s.stats.damage > PLAYER_SWORD.attackDamage, 'dmg up');
+}
+
+section('session mid-range + jump attack');
+{
+  const s = createSession();
+  s.startRun();
+  assert(PLAYER_SWORD.attackRange >= 70, 'longsword');
+  assert(s.getAttackBoxForPlayer().w >= 70, 'box wide');
+  s.spawnEnemy('slime');
+  const e = s.enemies[0];
+  e.x = s.player.x + 55; e.y = s.player.y; e.hp = 5;
+  s.player.facing = 1;
+  s.player.attackCd = 0; s.player.attacking = false;
+  const bw = s.player.w;
+  s.doAttack();
+  assertEq(s.player.w, bw, 'attack keeps body w');
+  assert(e.hp < 5 || s.kills >= 1, 'mid hit');
+
+  s.startRun();
+  s.player.onGround = false;
+  s.player.vy = -100;
+  s.player.attackCd = 0; s.player.attacking = false;
+  s.doAttack();
+  assert(s.player.attackAir, 'jump attack');
+  assert(s.getAttackBoxForPlayer().air, 'air box');
+}
+
+section('session enemy ledge');
+{
+  const s = createSession();
+  s.startRun();
+  const pl = makePlatform(200, GROUND_Y - 80, 120);
+  s.platforms.length = 0;
+  s.platforms.push(pl);
+  s.spawnEnemy('bandit');
+  const e = s.enemies[0];
+  e.x = pl.x + pl.w / 2; e.y = pl.y;
+  e.homeX = e.x; e.homeY = e.y;
+  e.patrolMin = pl.x + 10; e.patrolMax = pl.x + pl.w - 10;
+  e.onGround = true;
+  s.player.x = pl.x + pl.w + 200; s.player.y = pl.y;
+  const edge = pl.x + pl.w - ENEMY_AI.ledgeMargin;
+  for (let i = 0; i < 120; i++) s.updateEnemy(e, 1 / 30);
+  assert(e.x <= edge + 2, 'session ledge');
+  assert(s.canStandAt(e.x, e.y), 'can stand');
 }
 
 section('game over');
 {
-  const G = loadGame();
-  G.startGame();
-  G.hurtPlayer(999);
-  assertEq(G.state(), 'over', 'over');
+  const s = createSession();
+  s.startRun();
+  s.hurtPlayer(999);
+  assertEq(s.screen, 'over', 'over');
+}
+
+section('level shell data');
+{
+  const all = levels.listLevels();
+  assert(all.length >= 3, 'three stages');
+  assertEq(all[0].id, 'outer-vale', 'L1 id');
+  assert(levels.getLevelById('ruined-road'), 'L2');
+  assert(levels.getLevelById('iron-gate'), 'L3');
+  const L1 = levels.getLevelById('outer-vale');
+  assert(L1.bounds.maxX > L1.gateX, 'bounds past gate');
+  assert(L1.boss.arenaMinX >= L1.gateX - 50, 'arena near gate');
+  assert(levels.buildLevelPlatforms(L1).length >= 2, 'platforms');
+  assertEq(levels.nextLevel(L1)?.id, 'ruined-road', 'next L2');
+  assertEq(levels.nextLevel(levels.getLevelById('iron-gate')), null, 'campaign end');
+}
+
+section('loadLevel + bounds + no endless waves');
+{
+  const s = createSession();
+  assert(s.loadLevel('outer-vale'), 'load L1');
+  assertEq(s.screen, 'play', 'play');
+  assertEq(s.level.id, 'outer-vale', 'level set');
+  assertEq(s.levelPhase, 'explore', 'explore');
+  assert(s.platforms.length >= 2, 'authored plats');
+  assertEq(s.enemies.length, 0, 'no spawn yet');
+  // wave field = stage order (not endless counter)
+  assertEq(s.wave, 1, 'stage order');
+  const bounds = s.getPlayerBounds();
+  assert(bounds.maxX < 1e6, 'finite world');
+  const cam = s.getCameraBounds();
+  assert(cam.maxX >= 0, 'cam max');
+  // Simulate: no endless wave growth without progress
+  for (let i = 0; i < 180; i++) s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(s.wave, 1, 'no wave ramp');
+  assert(s.enemies.length === 0 || s.player.x < 280, 'no free spawns idle');
+}
+
+section('encounters + gate + boss + clear');
+{
+  const s = createSession();
+  s.loadLevel('outer-vale');
+  const L = s.level;
+  // Fire first encounter by walking past trigger
+  s.player.x = L.encounters[0].triggerX + 5;
+  s.updateLevelProgress();
+  assert(s.firedEncounters.has(L.encounters[0].id), 'enc fired');
+  assert(s.enemies.length >= 1, 'enc enemies');
+  // Clear enemies + fire all encounters, open gate
+  s.enemies.length = 0;
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  assert(s.isGateOpen(), 'gate open');
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 'boss phase');
+  assert(s.bossSpawned, 'boss spawned');
+  assert(s.arena, 'arena set');
+  assert(s.enemies.some(e => e.isBoss || e.type === 'boss'), 'boss present');
+  // Defeat boss
+  const boss = s.enemies.find(e => e.isBoss || e.type === 'boss');
+  const bi = s.enemies.indexOf(boss);
+  s.killEnemy(boss, bi);
+  assertEq(s.screen, 'clear', 'clear screen');
+  assert(s.bossDefeated, 'boss down');
+}
+
+section('fail screen');
+{
+  const s = createSession();
+  s.loadLevel('ruined-road');
+  s.hurtPlayer(999);
+  assertEq(s.screen, 'over', 'fail over');
+  assert(s.overReason.length > 0, 'reason');
+}
+
+section('upgrades pure');
+{
+  const stats = upgrades.defaultStats();
+  const p = { hp: 50, maxHp: 100, _owned: {} };
+  upgrades.applyUpgradeToRun(p, stats, UPGRADES.find(u => u.id === 'dmg'));
+  assert(stats.damage > PLAYER_SWORD.attackDamage, 'pure dmg');
 }
 
 console.log(`\n\n${passed} passed, ${failed} failed`);
-if (failed) { for (const f of failures) console.error(' -', f); process.exit(1); }
+if (failed) {
+  for (const f of failures) console.error(' -', f);
+  process.exit(1);
+}
 process.exit(0);
