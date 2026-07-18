@@ -55,6 +55,14 @@ export function aiPlatformUnder(e, platforms) {
 export function aiHorizontalIntent(e, player, platforms, aiCfg) {
   if (!e || e.hitStun > 0) return 0;
 
+  // Fresh spawn: patrol only, no chase
+  if (e.spawnGrace != null && e.spawnGrace > 0) {
+    if (e.x <= e.patrolMin) e.facing = 1;
+    else if (e.x >= e.patrolMax) e.facing = -1;
+    else if (!e.facing) e.facing = -1;
+    return e.facing;
+  }
+
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
@@ -125,6 +133,9 @@ export function tickEnemySlam(e, dt, player, meleeCfg) {
   if (e.slamT == null) e.slamT = 0;
 
   if (e.slamCd > 0) e.slamCd = Math.max(0, e.slamCd - dt);
+
+  // Spawn grace: no windup while newly spawned
+  if (e.spawnGrace != null && e.spawnGrace > 0) return null;
 
   const dx = player.x - e.x;
   const dy = (player.y || 0) - e.y;
@@ -210,6 +221,9 @@ export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, meleeCfg) {
   e.phase += dt;
   if (e.flash > 0) e.flash -= dt;
   if (e.hitStun > 0) e.hitStun = Math.max(0, e.hitStun - dt);
+  if (e.spawnGrace != null && e.spawnGrace > 0) {
+    e.spawnGrace = Math.max(0, e.spawnGrace - dt);
+  }
 
   e.vy += g * dt;
   if (e.vy > maxFall) e.vy = maxFall;

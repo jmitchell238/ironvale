@@ -1,6 +1,8 @@
 /**
  * Domain: player factory + body geometry + movement integration.
  * Sword logic lives in combat.js — not here.
+ *
+ * Movement feel: coyote, jump buffer, variable jump, duck, double-jump.
  */
 
 import { clamp } from '../core/math.js';
@@ -10,11 +12,14 @@ import {
 import { tickMeleeAttack } from './combat.js';
 
 export function makePlayer() {
+  const h = PLAYER_BODY.h;
   return {
     x: 80,
     y: GROUND_Y,
     w: PLAYER_BODY.w,
-    h: PLAYER_BODY.h,
+    h,
+    standH: h,
+    duckH: PLAYER_BODY.duckH || Math.floor(h * 0.58),
     vx: 0,
     vy: 0,
     hp: PLAYER_MOVE.maxHp,
@@ -32,6 +37,9 @@ export function makePlayer() {
     attackCd: 0,
     attackAir: false,
     attackHitDone: false,
+    ducking: false,
+    /** Air jumps remaining (refills on land). */
+    airJumps: PLAYER_MOVE.maxAirJumps != null ? PLAYER_MOVE.maxAirJumps : 1,
     _owned: {},
   };
 }
@@ -43,19 +51,10 @@ export function playerRight(p) { return p.x + p.w / 2; }
 export function playerTop(p) { return p.y - p.h; }
 
 /**
- * Integrate run/jump/platform collision for one frame.
+ * Integrate run/jump/duck/double-jump/platform collision for one frame.
  * Attack swing start is handled by caller (session); this ticks melee timers.
  *
  * @param {object} ctx
- * @param {object} ctx.player
- * @param {object} ctx.stats
- * @param {object[]} ctx.platforms
- * @param {number} ctx.cameraX
- * @param {number} ctx.jumpBuffered  (mutated via return)
- * @param {boolean} ctx.jumpHeld
- * @param {object} ctx.swordCfg
- * @param {function} [ctx.onJump]
- * @param {function} [ctx.onFellOff]
  * @returns {{ jumpBuffered: number, stillSwinging: boolean }}
  */
 export function integratePlayerMovement(dt, input, ctx) {
@@ -63,10 +62,26 @@ export function integratePlayerMovement(dt, input, ctx) {
   const stats = ctx.stats;
   let jumpBuffered = ctx.jumpBuffered;
   const { ix, iy, wantJump } = input;
+  const duckThresh = PLAYER_MOVE.duckThreshold != null ? PLAYER_MOVE.duckThreshold : 0.55;
+  const maxAir = PLAYER_MOVE.maxAirJumps != null ? PLAYER_MOVE.maxAirJumps : 1;
 
   if (wantJump || iy < -0.55) jumpBuffered = PLAYER_MOVE.jumpBuffer;
 
-  const spd = PLAYER_MOVE.runSpeed * stats.speedMul;
+  // ── Duck (ground only; hold down) ──
+  const wantDuck = p.onGround && iy >= duckThresh && !p.attacking;
+  if (wantDuck) {
+    p.ducking = true;
+    p.h = p.duckH || PLAYER_BODY.duckH || 28;
+  } else if (p.ducking) {
+    // Stand up if headroom (always true in this game — no ceilings)
+    p.ducking = false;
+    p.h = p.standH || PLAYER_BODY.h;
+  } else {
+    p.h = p.standH || PLAYER_BODY.h;
+  }
+
+  const spd = PLAYER_MOVE.runSpeed * stats.speedMul
+    * (p.ducking ? (PLAYER_MOVE.duckSpeedMul != null ? PLAYER_MOVE.duckSpeedMul : 0.45) : 1);
   const mx = Math.abs(ix) > 0.08 ? clamp(ix, -1, 1) : 0;
   const targetVx = mx * spd;
   const accel = p.onGround ? 2800 : 1800;
@@ -78,16 +93,39 @@ export function integratePlayerMovement(dt, input, ctx) {
   else if (mx < -0.1) p.facing = -1;
 
   if (jumpBuffered > 0) jumpBuffered -= dt;
-  if (p.onGround) p.coyote = PLAYER_MOVE.coyote;
-  else p.coyote = Math.max(0, p.coyote - dt);
+  if (p.onGround) {
+    p.coyote = PLAYER_MOVE.coyote;
+    p.airJumps = maxAir;
+  } else {
+    p.coyote = Math.max(0, p.coyote - dt);
+  }
 
-  if (jumpBuffered > 0 && p.coyote > 0 && !p.attacking) {
+  // Ground / coyote jump
+  if (jumpBuffered > 0 && p.coyote > 0 && !p.attacking && !p.ducking) {
     p.vy = PLAYER_MOVE.jumpVel * stats.jumpMul;
     p.onGround = false;
     p.coyote = 0;
     jumpBuffered = 0;
+    p.ducking = false;
+    p.h = p.standH || PLAYER_BODY.h;
     if (ctx.onJump) ctx.onJump();
+  } else if (
+    // Double jump (air only, after leaving ground)
+    jumpBuffered > 0
+    && !p.onGround
+    && p.coyote <= 0
+    && (p.airJumps || 0) > 0
+    && !p.attacking
+  ) {
+    p.vy = (PLAYER_MOVE.doubleJumpVel != null ? PLAYER_MOVE.doubleJumpVel : PLAYER_MOVE.jumpVel * 0.86)
+      * stats.jumpMul;
+    p.airJumps -= 1;
+    jumpBuffered = 0;
+    if (ctx.onJump) ctx.onJump();
+    if (ctx.onDoubleJump) ctx.onDoubleJump();
   }
+
+  // Variable jump height
   if (!ctx.jumpHeld && p.vy < -80) p.vy *= 0.55;
 
   p.vy += PLAYER_MOVE.gravity * dt;
@@ -122,6 +160,7 @@ export function integratePlayerMovement(dt, input, ctx) {
         p.y = pl.y;
         p.vy = 0;
         p.onGround = true;
+        p.airJumps = maxAir;
         break;
       }
     }
@@ -133,6 +172,7 @@ export function integratePlayerMovement(dt, input, ctx) {
     p.vy = 0;
     p.x = ctx.cameraX + CAM.focusX;
     p.inv = PLAYER_MOVE.invuln;
+    p.airJumps = maxAir;
   }
 
   const stillSwinging = tickMeleeAttack(p, dt, ctx.swordCfg, stats);

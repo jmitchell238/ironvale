@@ -6,7 +6,7 @@
  */
 
 import { GROUND_Y, W } from '../config/index.js';
-import { makePlatform } from './platforms.js';
+import { buildPlatformsFromDefs } from './platforms.js';
 
 /**
  * @typedef {{ type: string, x?: number, y?: number }} LevelEnemySpawn
@@ -36,70 +36,109 @@ import { makePlatform } from './platforms.js';
  */
 
 /**
- * Outer Vale — P2 prototype level 1 (difficulty baseline).
- * Teaching path: run → slash slime → jump platforms → light bandits → captain.
+ * Outer Vale — teaching stage with Mario-style rhythm.
+ * Intro ground → stair climb → gap hop → multi-tier choice → rolling hills → boss.
+ * High float platforms are optional shortcuts (main path stays ground-connected).
  */
+const G = GROUND_Y;
 const OUTER_VALE = {
   id: 'outer-vale',
   name: 'Outer Vale',
-  subtitle: 'Learn run, jump, and slash',
+  subtitle: 'Learn run, jump, double-jump & duck',
   order: 1,
   stub: false,
-  bounds: { minX: 0, maxX: 3200 },
-  spawn: { x: 80, y: GROUND_Y },
+  bounds: { minX: 0, maxX: 3720 },
+  spawn: { x: 80, y: G },
   platforms: [
-    { x: -40, y: GROUND_Y, w: 480 },
-    { x: 360, y: GROUND_Y - 48, w: 150 },
-    { x: 560, y: GROUND_Y, w: 260 },
-    { x: 880, y: GROUND_Y, w: 220 },
-    { x: 1080, y: GROUND_Y - 50, w: 130 },
-    { x: 1260, y: GROUND_Y, w: 280 },
-    { x: 1580, y: GROUND_Y - 38, w: 120 },
-    { x: 1740, y: GROUND_Y - 52, w: 120 },
-    { x: 1920, y: GROUND_Y, w: 300 },
-    { x: 2260, y: GROUND_Y - 48, w: 140 },
-    { x: 2440, y: GROUND_Y, w: 300 },
-    { x: 2780, y: GROUND_Y, w: 460 },
+    // ── Intro runway (safe teaching space) ──
+    { x: -40, y: G, w: 420, style: 'ground' },
+    // ── Stair climb (overlapping steps) ──
+    { x: 340, y: G - 28, w: 90, style: 'stone' },
+    { x: 400, y: G - 52, w: 90, style: 'stone' },
+    { x: 460, y: G - 76, w: 100, style: 'stone' },
+    // Landing terrace + low ground under (dual path)
+    { x: 540, y: G - 76, w: 160, style: 'float' },
+    { x: 520, y: G, w: 280, style: 'ground' },
+    // Drop down then small hop islands
+    { x: 820, y: G, w: 140, style: 'ground' },
+    { x: 1000, y: G - 40, w: 80, style: 'float' },
+    { x: 1120, y: G - 64, w: 80, style: 'float' },
+    { x: 1240, y: G - 40, w: 90, style: 'float' },
+    { x: 1380, y: G, w: 220, style: 'ground' },
+    // High road (optional) over long ground
+    { x: 1520, y: G - 88, w: 100, style: 'float' },
+    { x: 1660, y: G - 88, w: 100, style: 'float' },
+    { x: 1600, y: G, w: 280, style: 'ground' },
+    // Rolling hills / stairs down
+    { x: 1900, y: G - 36, w: 100, style: 'stone' },
+    { x: 2020, y: G - 60, w: 90, style: 'stone' },
+    { x: 2140, y: G - 36, w: 100, style: 'stone' },
+    { x: 2260, y: G, w: 200, style: 'ground' },
+    // Gap hop series (short gaps, modest rise — jump-safe)
+    { x: 2520, y: G, w: 140, style: 'ground' },
+    { x: 2680, y: G - 36, w: 100, style: 'float' },
+    { x: 2840, y: G, w: 180, style: 'ground' },
+    // Pre-gate rise
+    { x: 3040, y: G - 40, w: 110, style: 'stone' },
+    { x: 3180, y: G, w: 240, style: 'ground' },
+    // Boss arena floor (wide)
+    { x: 3400, y: G, w: 280, style: 'ground' },
   ],
   encounters: [
-    { id: 'ov-slash', triggerX: 200, enemies: [{ type: 'slime', x: 300 }] },
-    { id: 'ov-jump', triggerX: 340, enemies: [{ type: 'slime', x: 430, y: GROUND_Y - 48 }] },
+    // Teach slash — slime well ahead on open ground
+    { id: 'ov-slash', triggerX: 160, enemies: [{ type: 'slime', x: 380 }] },
+    // Stair slime
+    {
+      id: 'ov-jump',
+      triggerX: 320,
+      enemies: [{ type: 'slime', x: 500, y: G - 76 }],
+    },
+    // Pack on low ground after stairs
     {
       id: 'ov-pack',
-      triggerX: 760,
-      enemies: [{ type: 'slime', x: 840 }, { type: 'slime', x: 920 }],
-    },
-    {
-      id: 'ov-bandit',
-      triggerX: 1120,
-      enemies: [{ type: 'bandit', x: 1220 }, { type: 'slime', x: 1340 }],
-    },
-    {
-      id: 'ov-steps',
-      triggerX: 1540,
+      triggerX: 700,
       enemies: [
-        { type: 'slime', x: 1630, y: GROUND_Y - 38 },
-        { type: 'bandit', x: 1800, y: GROUND_Y - 52 },
+        { type: 'slime', x: 900 },
+        { type: 'slime', x: 980 },
       ],
     },
+    // Bandit after hop islands
+    {
+      id: 'ov-bandit',
+      triggerX: 1280,
+      enemies: [
+        { type: 'bandit', x: 1480 },
+        { type: 'slime', x: 1580 },
+      ],
+    },
+    // Hills pressure
+    {
+      id: 'ov-steps',
+      triggerX: 1860,
+      enemies: [
+        { type: 'slime', x: 1980, y: G - 36 },
+        { type: 'bandit', x: 2100, y: G - 60 },
+      ],
+    },
+    // Pre-gate
     {
       id: 'ov-gate-guard',
-      triggerX: 2220,
+      triggerX: 2780,
       enemies: [
-        { type: 'bandit', x: 2320 },
-        { type: 'slime', x: 2420 },
-        { type: 'slime', x: 2520 },
+        { type: 'bandit', x: 2980 },
+        { type: 'slime', x: 3100 },
+        { type: 'slime', x: 3220 },
       ],
     },
   ],
-  checkpoints: [{ id: 'ov-mid', x: 1300 }],
-  gateX: 2700,
+  checkpoints: [{ id: 'ov-mid', x: 1450 }],
+  gateX: 3340,
   boss: {
     type: 'bandit_captain',
-    arenaMinX: 2780,
-    arenaMaxX: 3180,
-    spawnX: 2980,
-    spawnY: GROUND_Y,
+    arenaMinX: 3400,
+    arenaMaxX: 3660,
+    spawnX: 3540,
+    spawnY: G,
   },
   clearBonus: 100,
 };
@@ -1036,7 +1075,7 @@ export function maxLevelOrder() {
  * @returns {ReturnType<typeof makePlatform>[]}
  */
 export function buildLevelPlatforms(def) {
-  return (def.platforms || []).map(p => makePlatform(p.x, p.y, p.w));
+  return buildPlatformsFromDefs(def.platforms || []);
 }
 
 /**

@@ -4,7 +4,7 @@
 
 import {
   ENEMIES, ENEMY_AI, MAX_ENEMIES, GROUND_Y, W, enemyIsBoss, getEnemyMeleeCfg,
-  NG_PLUS, PLAYER_MOVE,
+  NG_PLUS, PLAYER_MOVE, SPAWN_SAFE,
 } from '../../config/index.js';
 import { clamp, circleHit, rand } from '../../core/math.js';
 import {
@@ -43,10 +43,25 @@ export function spawnEnemy(session, type, opts = {}) {
   const scale = 1 + Math.max(0, (session.wave - 1) * 0.04);
   const ngHp = ngPlusHpMul(session.meta, NG_PLUS);
   const ngDmg = ngPlusDamageMul(session.meta, NG_PLUS);
-  const spawnX = opts.x != null
+  let spawnX = opts.x != null
     ? opts.x
     : (session.cameraX + W + rand(20, 80));
-  const pl = findPlatformAt(session, spawnX, opts.y);
+
+  // Never materialize on top of the player — push spawn ahead
+  const px = session.player?.x;
+  if (px != null && !opts.isBoss && !enemyIsBoss(type) && !def.isBoss) {
+    const minAhead = SPAWN_SAFE.minAhead != null ? SPAWN_SAFE.minAhead : 200;
+    const jitter = SPAWN_SAFE.leadJitter != null ? SPAWN_SAFE.leadJitter : 90;
+    if (spawnX < px + minAhead) {
+      spawnX = px + minAhead + rand(0, jitter);
+    }
+  }
+
+  let pl = findPlatformAt(session, spawnX, opts.y);
+  // If safe push left the authored platform, search again near new X
+  if (!pl || (opts.y != null && Math.abs(pl.y - opts.y) > 40)) {
+    pl = findPlatformAt(session, spawnX, opts.y);
+  }
   const margin = ENEMY_AI.ledgeMargin + 4;
   let x, y, homePl;
   if (pl) {
@@ -54,6 +69,11 @@ export function spawnEnemy(session, type, opts = {}) {
     const minX = pl.x + margin;
     const maxX = pl.x + pl.w - margin;
     x = clamp(spawnX, minX, maxX);
+    // If still too close after clamp, walk to platform end ahead of player
+    if (px != null && x < px + (SPAWN_SAFE.minAhead || 200) * 0.75 && !def.isBoss) {
+      x = Math.min(maxX, Math.max(x, px + 160));
+      x = clamp(x, minX, maxX);
+    }
     y = pl.y;
   } else {
     x = spawnX;
@@ -66,11 +86,13 @@ export function spawnEnemy(session, type, opts = {}) {
     || getEnemyMeleeCfg(type));
   const hasSlam = !!(def.hasSlam || opts.hasSlam);
   const meleeCfg = getEnemyMeleeCfg(type);
-  // Stagger first attack so packs don't all swing together
+  // Long first-attack delay so player can read the threat
   let slamCd = 0;
   if (hasMelee) {
-    slamCd = bossFlag ? 0.75 : 0.25 + Math.random() * 0.45;
+    const firstCd = SPAWN_SAFE.firstAttackCd != null ? SPAWN_SAFE.firstAttackCd : 0.85;
+    slamCd = bossFlag ? 0.9 : firstCd + Math.random() * 0.35;
   }
+  const grace = bossFlag ? 0.35 : (SPAWN_SAFE.grace != null ? SPAWN_SAFE.grace : 1.05);
   const hp = def.hp * scale * ngHp;
   const enemy = {
     type, x, y, w: def.w, h: def.h,
@@ -95,6 +117,7 @@ export function spawnEnemy(session, type, opts = {}) {
     slamT: 0,
     slamCd,
     slamHitDone: false,
+    spawnGrace: grace,
   };
   session.enemies.push(enemy);
   return enemy;
@@ -153,6 +176,8 @@ export function updateEnemies(session, dt) {
     // Melee enemies: damage only from telegraphed attack (not contact-only).
     // Slimes and other contact fodder still use body overlap.
     if (enemyUsesTelegraphedAttack(e)) continue;
+    // Spawn grace: contact fodder also waits a beat after popping in
+    if (e.spawnGrace != null && e.spawnGrace > 0) continue;
     if (circleHit(pcx, pcy, Math.min(session.player.w, session.player.h) * 0.32, e.x, e.y - e.h / 2, e.w * 0.35)) {
       session.hurtPlayer(e.damage);
       session.player.vx += (session.player.x < e.x ? -1 : 1) * 100;

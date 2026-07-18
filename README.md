@@ -9,9 +9,10 @@ Medieval **2D platformer** — run, jump, and sword-slash through discrete stage
 | Input | Action |
 |-------|--------|
 | Left stick / A D / ← → | Run |
-| JUMP / Space / W / ↑ | Jump |
+| JUMP / Space / W / ↑ | Jump (press again in air = double jump) |
+| S / ↓ | Duck |
 | ATK / J / F / Shift | Sword slash |
-| 1 / 2 / 3 | Pick level-up upgrade |
+| 1–6 | Allocate attributes (between stages) |
 | Esc | Menu |
 
 ## Features

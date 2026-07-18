@@ -2,7 +2,7 @@
 
 Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
 
-**Version:** 1.4.000 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 1.4.100 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -200,6 +200,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **Polish melee telegraphs** | Done (v1.3.100) | Bandit/skeleton/ogre/boss windups; slime contact-only |
 | **P1b systems extract** | Done (v1.3.200) | `world/systems/*` — thin GameSession facade |
 | **P4 Scale + polish** | Done (v1.4.000) | 10 stages, checkpoints, hitstop juice, New Game+ |
+| **Feel + art** | Done (v1.4.100) | Safe spawns, duck + double-jump, readable platforms, Mario-style L1 |
 
 ---
 

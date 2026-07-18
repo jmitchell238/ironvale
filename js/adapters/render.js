@@ -22,61 +22,207 @@ function roundRectPath(ctx, x, y, w, h, r) {
 }
 
 export function drawBackground(ctx, cam) {
+  // Sky gradient — brighter so terrain reads against it
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#6a90b8');
-  g.addColorStop(0.45, '#a8c4a0');
-  g.addColorStop(1, '#5a6a48');
+  g.addColorStop(0, '#7eb0d8');
+  g.addColorStop(0.35, '#b8d4a8');
+  g.addColorStop(0.7, '#8aaa68');
+  g.addColorStop(1, '#5a7048');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
+  // Soft clouds (parallax far)
+  ctx.save();
+  const cloudScroll = (cam * 0.04) % 220;
+  for (let i = -1; i < 4; i++) {
+    const cx = i * 220 - cloudScroll + 40;
+    const cy = 70 + (i % 3) * 28;
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#eef6ff';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 42, 14, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 28, cy + 4, 30, 12, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - 24, cy + 6, 26, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Distant hills silhouette
   const hills = getSprite('bg/hills');
   if (hills && hills.ready) {
     const img = hills.img;
-    const ch = Math.min(img.height * 0.85, (GROUND_Y - PLAY.top) * 0.5);
+    const ch = Math.min(img.height * 0.9, (GROUND_Y - PLAY.top) * 0.52);
     const scale = ch / img.height;
     const cw = img.width * scale;
-    const y = GROUND_Y - ch + 6;
-    const scroll = (cam * 0.1) % cw;
+    const y = GROUND_Y - ch + 8;
+    const scroll = (cam * 0.12) % cw;
     ctx.save();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.62;
     ctx.imageSmoothingEnabled = true;
     for (let x = -scroll - cw; x < W + cw; x += cw) {
       ctx.drawImage(img, x, y, cw, ch);
     }
     ctx.restore();
-    const wash = ctx.createLinearGradient(0, y, 0, GROUND_Y);
-    wash.addColorStop(0, 'rgba(40, 50, 40, 0.05)');
-    wash.addColorStop(1, 'rgba(30, 40, 30, 0.35)');
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, y, W, GROUND_Y - y + 2);
+  } else {
+    // Procedural distant ridges
+    ctx.save();
+    const scroll = (cam * 0.1) % 180;
+    ctx.fillStyle = 'rgba(70, 100, 70, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(-20, GROUND_Y);
+    for (let x = -scroll; x < W + 40; x += 60) {
+      const peak = GROUND_Y - 90 - Math.sin((x + cam) * 0.01) * 40;
+      ctx.lineTo(x, peak);
+    }
+    ctx.lineTo(W + 20, GROUND_Y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
-  ctx.fillStyle = '#3a2e22';
+  // Mid-ground trees (simple silhouettes, parallax)
+  ctx.save();
+  const tScroll = (cam * 0.22) % 96;
+  for (let x = -tScroll; x < W + 40; x += 96) {
+    const base = GROUND_Y - 2;
+    const hgt = 36 + ((Math.floor(x + cam) * 17) % 28);
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#2a4028';
+    ctx.fillRect(x + 18, base - hgt * 0.35, 6, hgt * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(x + 4, base - hgt * 0.3);
+    ctx.lineTo(x + 21, base - hgt);
+    ctx.lineTo(x + 38, base - hgt * 0.3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Deep soil under the playfield (readable floor bed)
+  const soil = ctx.createLinearGradient(0, GROUND_Y, 0, H);
+  soil.addColorStop(0, '#4a3828');
+  soil.addColorStop(0.15, '#3a2a1c');
+  soil.addColorStop(1, '#1e1610');
+  ctx.fillStyle = soil;
   ctx.fillRect(0, GROUND_Y + 2, W, H - GROUND_Y);
+
+  // Grass strip at world floor line for depth cue when no platform tile
+  ctx.fillStyle = 'rgba(70, 130, 55, 0.35)';
+  ctx.fillRect(0, GROUND_Y, W, 4);
+}
+
+/**
+ * Draw a single platform with depth: top grass/stone, dirt body, shadow, edge lip.
+ */
+function drawPlatformBlock(ctx, pl, x) {
+  const y = pl.y;
+  const w = pl.w;
+  const bodyH = pl.ground ? Math.max(pl.h, 32) : Math.max(pl.h + 6, 18);
+  const style = pl.style || (pl.ground ? 'ground' : 'float');
+  const isStone = style === 'stone';
+  const isGround = pl.ground || style === 'ground';
+
+  // Drop shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + 6, w * 0.48, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Dirt / stone body
+  if (isGround) {
+    const body = ctx.createLinearGradient(0, y, 0, y + bodyH + 18);
+    body.addColorStop(0, '#6b5238');
+    body.addColorStop(0.35, '#5a422c');
+    body.addColorStop(1, '#3e2e1e');
+    ctx.fillStyle = body;
+    ctx.fillRect(x, y, w, bodyH + (isGround ? 20 : 0));
+    // Soil clumps
+    ctx.fillStyle = 'rgba(40, 28, 16, 0.35)';
+    for (let i = 8; i < w; i += 22) {
+      ctx.fillRect(x + i, y + 10 + (i % 3) * 3, 8, 5);
+    }
+  } else if (isStone) {
+    ctx.fillStyle = '#6a6460';
+    ctx.fillRect(x, y, w, bodyH);
+    ctx.fillStyle = '#7a7470';
+    ctx.fillRect(x + 2, y + 2, w - 4, bodyH * 0.4);
+    ctx.strokeStyle = 'rgba(30,28,26,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, bodyH - 1);
+  } else {
+    // Floating wood/dirt pad
+    const body = ctx.createLinearGradient(0, y, 0, y + bodyH);
+    body.addColorStop(0, '#7a5e3a');
+    body.addColorStop(1, '#4a3620');
+    ctx.fillStyle = body;
+    ctx.fillRect(x, y, w, bodyH);
+    // Underside lip
+    ctx.fillStyle = 'rgba(30, 20, 12, 0.55)';
+    ctx.fillRect(x + 2, y + bodyH - 3, w - 4, 3);
+  }
+
+  // Bright walkable top surface (high contrast — key readability fix)
+  const topH = isGround ? 7 : 6;
+  if (isStone) {
+    ctx.fillStyle = '#9a948c';
+    ctx.fillRect(x, y - 1, w, topH);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(x + 1, y - 1, w - 2, 2);
+  } else {
+    // Grass top
+    const grass = ctx.createLinearGradient(0, y - 2, 0, y + topH);
+    grass.addColorStop(0, '#7ec850');
+    grass.addColorStop(0.55, '#5aaa38');
+    grass.addColorStop(1, '#4a8a28');
+    ctx.fillStyle = grass;
+    ctx.fillRect(x - 1, y - 2, w + 2, topH + 1);
+    // Blade nubs
+    ctx.fillStyle = '#8ed858';
+    for (let i = 3; i < w; i += 10) {
+      ctx.fillRect(x + i, y - 4, 3, 3);
+    }
+    // Gold rim so feet land line is obvious
+    ctx.fillStyle = 'rgba(220, 190, 80, 0.65)';
+    ctx.fillRect(x, y - 2, w, 1.5);
+  }
+
+  // Left/right edge bevels
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(x, y - 1, 3, bodyH);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x + w - 3, y - 1, 3, bodyH);
 }
 
 export function drawPlatforms(ctx, platforms, cam) {
-  for (const pl of platforms) {
+  // Sort back-to-front: higher Y (lower on screen) drawn later for overlap
+  const list = platforms.slice().sort((a, b) => a.y - b.y);
+  for (const pl of list) {
     const x = pl.x - cam;
-    if (x + pl.w < -20 || x > W + 20) continue;
+    if (x + pl.w < -30 || x > W + 30) continue;
+
+    // Prefer rich procedural blocks (tiles alone read as flat bars)
+    drawPlatformBlock(ctx, pl, x);
+
+    // Optional tile overlay for texture (subtle)
     const key = pl.ground ? 'tile/ground' : 'tile/platform';
     const tile = getSprite(key);
-    if (tile && tile.ready) {
+    if (tile && tile.ready && pl.w > 80) {
       ctx.save();
+      ctx.globalAlpha = 0.22;
       ctx.imageSmoothingEnabled = false;
-      const tw = pl.ground ? 48 : 40;
-      const th = pl.ground ? Math.max(pl.h, 26) : pl.h + 8;
+      const tw = 48;
+      const th = pl.ground ? 28 : 18;
       for (let px = 0; px < pl.w; px += tw) {
         const ww = Math.min(tw, pl.w - px);
         ctx.drawImage(tile.img, x + px, pl.y, ww, th);
       }
       ctx.restore();
-    } else {
-      ctx.fillStyle = pl.ground ? '#5a4a32' : '#6b5a3e';
-      ctx.fillRect(x, pl.y, pl.w, pl.h + 6);
+      // Re-draw crisp grass top over texture
+      ctx.fillStyle = 'rgba(100, 180, 60, 0.55)';
+      ctx.fillRect(x, pl.y - 2, pl.w, 4);
+      ctx.fillStyle = 'rgba(220, 190, 80, 0.5)';
+      ctx.fillRect(x, pl.y - 2, pl.w, 1);
     }
-    ctx.fillStyle = 'rgba(201, 162, 39, 0.55)';
-    ctx.fillRect(x, pl.y, pl.w, 2);
   }
 }
 
@@ -84,6 +230,7 @@ function playerAnimKey(p) {
   if (p.hp <= 0) return 'player/dead';
   if (p.attacking) return p.attackAir ? 'player/jump_attack' : 'player/attack';
   if (!p.onGround) return 'player/jump';
+  if (p.ducking) return 'player/idle';
   if (Math.abs(p.vx) > 40) return 'player/run';
   if (Math.abs(p.vx) > 15) return 'player/walk';
   return 'player/idle';
@@ -110,13 +257,16 @@ export function drawPlayer(ctx, p, t, cam, stats) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.ellipse(p.x - cam, p.y - 1, 14, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(p.x - cam, p.y - 1, p.ducking ? 16 : 14, 4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   const flash = p.inv > 0 && Math.floor(t * 18) % 2 === 0;
-  const scale = PLAYER_DRAW.drawScale || 1.35;
-  const ok = drawSprite(ctx, key, frame, p.x, p.y + 2, {
+  let scale = PLAYER_DRAW.drawScale || 1.35;
+  // Squash sprite when ducking (no dedicated crouch sheet)
+  if (p.ducking) scale *= 0.72;
+  const footY = p.ducking ? p.y + 4 : p.y + 2;
+  const ok = drawSprite(ctx, key, frame, p.x, footY, {
     scale, flip: (p.facing || 1) < 0, cam, alpha: flash ? 0.4 : 1,
   });
   if (!ok) {
@@ -348,6 +498,12 @@ export function drawControls(ctx, stick) {
   ctx.beginPath();
   ctx.arc(cx + stick.dx * (br - 14), cy + clamp(stick.dy, -1, 1) * (br - 14) * 0.3, 13, 0, Math.PI * 2);
   ctx.fill();
+  // Stick hint: ↓ duck
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = '#a89070';
+  ctx.font = '9px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('↓ duck', cx, cy + br + 12);
 
   const jx = W - 58, jy = H - 52;
   ctx.globalAlpha = stick.jumpDown ? 0.75 : 0.35;
@@ -360,6 +516,10 @@ export function drawControls(ctx, stick) {
   ctx.textBaseline = 'middle';
   ctx.globalAlpha = 0.95;
   ctx.fillText('JUMP', jx, jy);
+  ctx.globalAlpha = 0.45;
+  ctx.font = '8px system-ui';
+  ctx.fillStyle = '#a89070';
+  ctx.fillText('×2 air', jx, jy + 32);
 
   const ax = W - 58, ay = H - 118;
   ctx.globalAlpha = stick.attackDown ? 0.8 : 0.38;
@@ -368,6 +528,7 @@ export function drawControls(ctx, stick) {
   ctx.beginPath(); ctx.arc(ax, ay, 26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#f5c6c0';
   ctx.globalAlpha = 0.95;
+  ctx.font = 'bold 10px system-ui';
   ctx.fillText('ATK', ax, ay);
   ctx.restore();
 }

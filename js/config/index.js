@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '1.4.000';
+export const GAME_VERSION = '1.4.100';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 
@@ -20,7 +20,7 @@ export const PLAY_W = PLAY.right - PLAY.left;
 export const PLAY_H = PLAY.bottom - PLAY.top;
 export const GROUND_Y = PLAY.bottom - 18;
 
-export const PLAYER_BODY = { w: 28, h: 48 };
+export const PLAYER_BODY = { w: 28, h: 48, duckH: 28 };
 
 export const PLAYER_MOVE = {
   runSpeed: 210,
@@ -28,10 +28,28 @@ export const PLAYER_MOVE = {
   invuln: 0.65,
   gravity: 1550,
   jumpVel: -560,
+  /** Second jump while airborne (slightly softer than first). */
+  doubleJumpVel: -480,
   maxFall: 780,
   coyote: 0.12,
   jumpBuffer: 0.14,
   airControl: 0.9,
+  /** Hold down on ground to duck (smaller hitbox). */
+  duckThreshold: 0.55,
+  duckSpeedMul: 0.45,
+  maxAirJumps: 1,
+};
+
+/** Keep spawns from materializing on the player's face. */
+export const SPAWN_SAFE = {
+  /** Min horizontal distance ahead of player for new spawns. */
+  minAhead: 200,
+  /** Extra random lead past minAhead. */
+  leadJitter: 90,
+  /** No aggro / attack while grace remains. */
+  grace: 1.05,
+  /** First melee windup delay after grace. */
+  firstAttackCd: 0.85,
 };
 
 export const PLAYER_SWORD = {
@@ -61,7 +79,6 @@ export const CAM = { focusX: W * 0.32, lerp: 6 };
 export const MAX_ENEMIES = 40;
 export const MAX_COINS = 80;
 export const MAX_PARTICLES = 160;
-export const MAX_PLATFORMS = 48;
 
 export function xpForLevel(level) {
   return Math.floor(10 + level * 7 + level * level * 1.2);
@@ -88,9 +105,14 @@ export const JUMP_SAFE = {
   gapFracDown: 0.78,
   maxDrop: 140,
   minGap: 18,
-  minWidth: 96,
-  maxWidth: 170,
+  /** Authored platforms may be narrower (Mario-style steps). */
+  minWidth: 56,
+  maxWidth: 200,
+  /** Floor for procedural generation only. */
+  procMinWidth: 96,
 };
+
+export const MAX_PLATFORMS = 64;
 
 export const ENEMIES = {
   /** Contact-only fodder (no telegraph). */

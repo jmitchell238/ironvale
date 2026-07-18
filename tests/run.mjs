@@ -341,9 +341,12 @@ section('Outer Vale prototype (P2 L1)');
   assert(ENEMIES.bandit_captain.hp >= 100, 'captain tanky');
   assert(ENEMIES.bandit_captain.hp < ENEMIES.boss.hp, 'baseline < late boss');
   const plats = levels.buildLevelPlatforms(L);
-  assert(plats.length >= 10, 'authored layout depth');
+  assert(plats.length >= 12, 'authored layout depth (Mario-style multi-tier)');
   assert(platformsChainReachable(plats, 1, 1), 'L1 jump-safe chain');
   assert(L.encounters.length >= 5, 'teaching encounters');
+  // Height variety: not a flat line of ground-only platforms
+  const ys = new Set(plats.map(p => Math.round(p.y)));
+  assert(ys.size >= 4, 'multi-height design');
   const roster = new Set();
   for (const enc of L.encounters) {
     for (const sp of enc.enemies) roster.add(sp.type);
@@ -500,8 +503,10 @@ section('telegraphed melee (bandit/ogre; slime contact)');
   assertEq(s.player.hp, hpBefore, 'bandit no contact damage while idle');
 
   s.enemies.length = 0;
-  const sl = s.spawnEnemy('slime', { x: s.player.x, y: GROUND_Y });
+  const sl = s.spawnEnemy('slime', { x: s.player.x + 250, y: GROUND_Y });
   assert(sl && !sl.hasMelee, 'slime no hasMelee');
+  // After spawn grace ends, contact still hurts
+  sl.spawnGrace = 0;
   sl.x = s.player.x;
   sl.y = s.player.y;
   s.player.inv = 0;
@@ -775,6 +780,40 @@ section('P4: checkpoints continue');
   assertEq(s.screen, 'play', 'back to play');
   assertEq(s.player.x, cp.x, 'spawn at checkpoint');
   assert(s.firedEncounters.has(s.level.encounters[0].id), 'early enc kept');
+}
+
+section('feel: duck + double jump + safe spawn');
+{
+  const s = createSession();
+  s.loadLevel('outer-vale');
+  // Duck
+  s.update(0.016, { x: 0, y: 1, jump: false, attack: false });
+  assert(s.player.ducking, 'ducking held down');
+  assert(s.player.h < s.player.standH, 'duck height');
+  // Stand
+  s.update(0.016, { x: 0, y: 0, jump: false, attack: false });
+  assert(!s.player.ducking, 'stand up');
+  // Double jump
+  s.player.onGround = false;
+  s.player.coyote = 0;
+  s.player.airJumps = 1;
+  s.player.vy = 100;
+  s.jumpBuffered = 0.1;
+  s.update(0.016, { x: 0, y: 0, jump: true, attack: false });
+  assert(s.player.vy < 0, 'double jump launches');
+  assertEq(s.player.airJumps, 0, 'air jump spent');
+  // Safe spawn: authored x near player is pushed ahead
+  s.player.x = 500;
+  s.enemies.length = 0;
+  const e = s.spawnEnemy('bandit', { x: 510, y: GROUND_Y });
+  assert(e, 'spawned');
+  assert(e.x >= s.player.x + 150, 'spawn not on face');
+  assert(e.spawnGrace > 0, 'spawn grace');
+  // During grace, melee does not wind up
+  e.x = s.player.x;
+  e.slamCd = 0;
+  for (let i = 0; i < 4; i++) s.updateEnemy(e, 0.02);
+  assertEq(e.slamState, 'idle', 'no instant attack in grace');
 }
 
 section('P4: New Game+ + juice hitstop');
