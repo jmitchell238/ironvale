@@ -2,7 +2,7 @@
 
 Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
 
-**Version:** 1.3.100 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 1.3.200 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -30,7 +30,9 @@ Clean, layered architecture for a medieval action-platformer (Castlevania-style 
 └───────────────────────────┬─────────────────────────────┘
                             │ drives / reads
 ┌───────────────────────────▼─────────────────────────────┐
-│  world/GameSession.js   Mutable run state + systems      │
+│  world/GameSession.js   Mutable run state (thin facade)  │
+│  world/systems/         player · combat · enemy ·        │
+│                         camera · level                   │
 └───────────────────────────┬─────────────────────────────┘
                             │ calls pure functions
 ┌───────────────────────────▼─────────────────────────────┐
@@ -62,7 +64,13 @@ js/
     audio.js             Web Audio beeps
     save.js              localStorage
   world/
-    GameSession.js       One class owns the run
+    GameSession.js       One class owns the run (thin facade)
+    systems/
+      player.js          Movement, hurt, invuln
+      combat.js          Melee, kills, XP grant
+      enemy.js           Spawn, AI tick, contact damage
+      camera.js          Follow + clamp
+      level.js           Bounds, encounters, gate, boss arena
   domain/
     combat.js            Sword hitbox, swing, resolve hits
     enemyAi.js           Ledge-safe patrol / aggro / integrate
@@ -99,7 +107,7 @@ Tests in `tests/run.mjs` section **“sword ≠ body”** lock the body/sword sp
 
 ## 5. GameSession (world layer)
 
-Single source of run mutation:
+Single source of run mutation; systems do the work:
 
 ```js
 const session = new GameSession({ audio, save });
@@ -111,9 +119,11 @@ session.update(dt, { x, y, jump, attack });
 ```
 
 - Injects **audio** and **save** adapters (testable with no-ops).
+- **Systems** under `world/systems/` receive the session and mutate run state.
 - Domain modules receive plain objects + config; they do not know about DOM.
 - Render reads session fields (or `snapshot()`); it never writes score/HP.
 - **Level APIs:** `loadLevel`, `getPlayerBounds` / `getCameraBounds`, `getGateX`, `isGateOpen`, `enterBossArena`, `clearLevel`, `getNextLevel`.
+- Public session methods stay stable for app + tests; implementation lives in systems.
 
 ---
 
@@ -186,6 +196,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **P2 L3 Iron Gate** | Done (v1.2.300) | Ogres + war-chief telegraphed slams, campaign clear |
 | **P3 RPG** | Done (v1.3.000) | Persistent XP + attrs between levels only |
 | **Polish melee telegraphs** | Done (v1.3.100) | Bandit/skeleton/ogre/boss windups; slime contact-only |
+| **P1b systems extract** | Done (v1.3.200) | `world/systems/*` — thin GameSession facade |
 | **P4 Scale** | Planned | ~10 levels |
 
 ---

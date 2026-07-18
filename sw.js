@@ -1,4 +1,4 @@
-const CACHE = 'ironvale-1.3.100';
+const CACHE = 'ironvale-1.3.200';
 
 const ASSETS = [
   './', './index.html', './css/style.css',
@@ -13,6 +13,11 @@ const ASSETS = [
   './js/domain/rpg.js',
   './js/domain/levels.js',
   './js/world/GameSession.js',
+  './js/world/systems/camera.js',
+  './js/world/systems/combat.js',
+  './js/world/systems/enemy.js',
+  './js/world/systems/level.js',
+  './js/world/systems/player.js',
   './js/adapters/save.js',
   './js/adapters/audio.js',
   './js/adapters/sprites.js',

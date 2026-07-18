@@ -1,34 +1,59 @@
 /**
  * World layer: one playable run / session.
  *
- * Owns mutable run state. Domain modules stay pure; adapters (audio, save)
- * are injected so this stays testable without DOM.
+ * Owns mutable run state and orchestrates world systems. Domain modules stay
+ * pure; adapters (audio, save) are injected so this stays testable without DOM.
  *
+ * Systems live under world/systems/{player,combat,enemy,camera,level}.
  * Primary loop: discrete campaign levels (loadLevel → play → clear | fail).
- * Endless waves are no longer the primary mode.
  */
 
 import {
-  PLAYER, PLAYER_BODY, PLAYER_MOVE, PLAYER_SWORD, ENEMIES, ENEMY_AI, CAM, W, GROUND_Y,
-  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, enemyIsBoss, getEnemyMeleeCfg,
+  PLAYER, PLAYER_BODY, PLAYER_SWORD, MAX_PARTICLES,
 } from '../config/index.js';
-import { clamp, circleHit, dist, rand, lerp } from '../core/math.js';
-import {
-  beginMeleeAttack, resolveMeleeHits, hasMeleePriority, getAttackBox,
-} from '../domain/combat.js';
-import {
-  aiUpdateEnemy, aiPatrolBounds, aiCanStandAt, enemyUsesTelegraphedAttack,
-} from '../domain/enemyAi.js';
+import { rand, dist } from '../core/math.js';
+import { getAttackBox } from '../domain/combat.js';
 import { makePlatform, canReachPlatform, platformsChainReachable } from '../domain/platforms.js';
-import { makePlayer, playerCx, playerCy, integratePlayerMovement } from '../domain/player.js';
+import { playerCx, playerCy } from '../domain/player.js';
 import {
-  cloneMeta, defaultMeta, applyXp, allocatePoint, attrsToCombatStats, attrsToMaxHp,
-  unlockAfterClear, isLevelUnlocked, xpToNext,
+  cloneMeta, defaultMeta, allocatePoint, attrsToCombatStats, attrsToMaxHp,
+  isLevelUnlocked, xpToNext, unlockAfterClear,
 } from '../domain/rpg.js';
+import { listLevels, getLevelById } from '../domain/levels.js';
+
+import { updateCamera, getCameraBounds } from './systems/camera.js';
 import {
-  getLevelById, listLevels, buildLevelPlatforms, nextLevel,
-  cameraLimits, playerWorldLimits,
-} from '../domain/levels.js';
+  doAttack as sysDoAttack,
+  applyAttackHits as sysApplyAttackHits,
+  killEnemy as sysKillEnemy,
+  getAttackBoxForPlayer as sysGetAttackBox,
+  addXp as sysAddXp,
+} from './systems/combat.js';
+import {
+  spawnEnemy as sysSpawnEnemy,
+  findPlatformAt as sysFindPlatformAt,
+  canStandAt as sysCanStandAt,
+  updateEnemy as sysUpdateEnemy,
+  updateEnemies,
+} from './systems/enemy.js';
+import {
+  getPlayerBounds as sysGetPlayerBounds,
+  getGateX as sysGetGateX,
+  isGateOpen as sysIsGateOpen,
+  allEncountersFired as sysAllEncountersFired,
+  fireEncounter as sysFireEncounter,
+  enterBossArena as sysEnterBossArena,
+  updateLevelProgress as sysUpdateLevelProgress,
+  loadLevelIntoSession,
+  getNextLevel as sysGetNextLevel,
+} from './systems/level.js';
+import {
+  updatePlayer,
+  hurtPlayer as sysHurtPlayer,
+  tickPlayerInvuln,
+  requestJump as sysRequestJump,
+  setJumpHeld as sysSetJumpHeld,
+} from './systems/player.js';
 
 const noopAudio = {
   slash() {}, hit() {}, jump() {}, coin() {}, hurt() {},
@@ -141,25 +166,7 @@ export class GameSession {
    * @returns {boolean}
    */
   loadLevel(levelId) {
-    const def = levelId ? getLevelById(levelId) : listLevels()[0];
-    if (!def) return false;
-
-    // Refresh meta from save, then enforce unlock
-    this.meta = this._loadMetaFromSave();
-    if (!isLevelUnlocked(this.meta, def.order)) return false;
-
-    this._initEmpty();
-    this.level = def;
-    this.wave = def.order;
-    this.player = makePlayer();
-    this.player.x = def.spawn.x;
-    this.player.y = def.spawn.y ?? GROUND_Y;
-    this._applyMetaToRun();
-    this.platforms = buildLevelPlatforms(def);
-    this.cameraX = Math.max(0, def.spawn.x - CAM.focusX);
-    this.levelPhase = 'explore';
-    this.screen = 'play';
-    return true;
+    return loadLevelIntoSession(this, levelId);
   }
 
   /**
@@ -223,7 +230,6 @@ export class GameSession {
     if (this.player) {
       this.burst(playerCx(this.player), playerCy(this.player), '#c9a227', 28, 180);
     }
-    // Allocate between levels when points are banked; else clear summary.
     this.screen = this.meta.unspentPoints > 0 ? 'allocate' : 'clear';
   }
 
@@ -257,66 +263,25 @@ export class GameSession {
 
   /** @returns {import('../domain/levels.js').LevelDef | null} */
   getNextLevel() {
-    const n = this.level ? nextLevel(this.level) : null;
-    if (!n) return null;
-    if (!isLevelUnlocked(this.meta, n.order)) return null;
-    return n;
+    return sysGetNextLevel(this);
   }
 
   // ---- input hooks ----------------------------------------------------------
 
-  requestJump() { this.jumpBuffered = PLAYER_MOVE.jumpBuffer; }
-  setJumpHeld(h) { this.jumpHeld = !!h; }
+  requestJump() { sysRequestJump(this); }
+  setJumpHeld(h) { sysSetJumpHeld(this, h); }
   requestAttack() { this.attackQueued = true; }
 
-  // ---- bounds / gate / arena ------------------------------------------------
+  // ---- bounds / gate / arena (level system) ---------------------------------
 
-  /**
-   * Active world limits for the player (arena when boss, else level bounds).
-   * @returns {{ minX: number, maxX: number }}
-   */
-  getPlayerBounds() {
-    if (this.arena) {
-      return {
-        minX: this.arena.minX + 20,
-        maxX: this.arena.maxX - 20,
-      };
-    }
-    if (this.level) return playerWorldLimits(this.level);
-    return { minX: 24, maxX: 1e9 };
-  }
-
-  /**
-   * Camera clamp for current phase.
-   * @returns {{ minX: number, maxX: number }}
-   */
-  getCameraBounds() {
-    if (this.arena) {
-      return {
-        minX: this.arena.minX,
-        maxX: Math.max(this.arena.minX, this.arena.maxX - W),
-      };
-    }
-    if (this.level) return cameraLimits(this.level, W);
-    return { minX: 0, maxX: 1e9 };
-  }
-
-  /** End-gate world X, or null. */
-  getGateX() {
-    return this.level ? this.level.gateX : null;
-  }
-
-  /** True once gate is reachable (encounters done, not yet in boss). */
-  isGateOpen() {
-    if (!this.level || this.levelPhase !== 'explore') return false;
-    if (this.bossSpawned) return false;
-    return this.allEncountersFired() && this.enemies.length === 0;
-  }
-
-  allEncountersFired() {
-    if (!this.level) return true;
-    return this.level.encounters.every(e => this.firedEncounters.has(e.id));
-  }
+  getPlayerBounds() { return sysGetPlayerBounds(this); }
+  getCameraBounds() { return getCameraBounds(this); }
+  getGateX() { return sysGetGateX(this); }
+  isGateOpen() { return sysIsGateOpen(this); }
+  allEncountersFired() { return sysAllEncountersFired(this); }
+  fireEncounter(enc) { sysFireEncounter(this, enc); }
+  enterBossArena() { sysEnterBossArena(this); }
+  updateLevelProgress() { sysUpdateLevelProgress(this); }
 
   // ---- particles ------------------------------------------------------------
 
@@ -331,158 +296,17 @@ export class GameSession {
     }
   }
 
-  // ---- spawns ---------------------------------------------------------------
+  // ---- spawns / enemy (enemy system) ----------------------------------------
 
-  findPlatformAt(x, preferredY) {
-    let best = null;
-    let bestDist = Infinity;
-    for (const pl of this.platforms) {
-      if (x < pl.x - 4 || x > pl.x + pl.w + 4) continue;
-      const d = preferredY != null ? Math.abs(pl.y - preferredY) : 0;
-      if (d < bestDist) {
-        bestDist = d;
-        best = pl;
-      }
-    }
-    return best;
-  }
+  findPlatformAt(x, preferredY) { return sysFindPlatformAt(this, x, preferredY); }
+  spawnEnemy(type, opts = {}) { return sysSpawnEnemy(this, type, opts); }
+  canStandAt(x, refY) { return sysCanStandAt(this, x, refY); }
+  updateEnemy(e, dt) { return sysUpdateEnemy(this, e, dt); }
 
-  /**
-   * @param {string} type
-   * @param {{ x?: number, y?: number, isBoss?: boolean }} [opts]
-   */
-  spawnEnemy(type, opts = {}) {
-    if (this.enemies.length >= MAX_ENEMIES) return null;
-    const def = ENEMIES[type] || ENEMIES.slime;
-    const scale = 1 + Math.max(0, (this.wave - 1) * 0.04);
-    const spawnX = opts.x != null
-      ? opts.x
-      : (this.cameraX + W + rand(20, 80));
-    const pl = this.findPlatformAt(spawnX, opts.y);
-    const margin = ENEMY_AI.ledgeMargin + 4;
-    let x, y, homePl;
-    if (pl) {
-      homePl = pl;
-      const minX = pl.x + margin;
-      const maxX = pl.x + pl.w - margin;
-      x = clamp(spawnX, minX, maxX);
-      y = pl.y;
-    } else {
-      x = spawnX;
-      y = opts.y != null ? opts.y : GROUND_Y;
-      homePl = null;
-    }
-    const bounds = aiPatrolBounds(x, homePl, ENEMY_AI);
-    const bossFlag = !!opts.isBoss || enemyIsBoss(type) || !!def.isBoss;
-    const hasMelee = !!(def.hasMelee || def.hasSlam || opts.hasMelee || opts.hasSlam
-      || getEnemyMeleeCfg(type));
-    const hasSlam = !!(def.hasSlam || opts.hasSlam);
-    const meleeCfg = getEnemyMeleeCfg(type);
-    // Stagger first attack so packs don't all swing together
-    let slamCd = 0;
-    if (hasMelee) {
-      slamCd = bossFlag ? 0.75 : 0.25 + Math.random() * 0.45;
-    }
-    const enemy = {
-      type, x, y, w: def.w, h: def.h,
-      hp: def.hp * scale, maxHp: def.hp * scale,
-      speed: def.speed * (0.9 + Math.random() * 0.25),
-      score: Math.floor(def.score * (1 + (this.wave - 1) * 0.05)),
-      xp: def.xp, color: def.color, damage: def.damage,
-      skin: def.skin, frames: def.frames, fw: def.fw, fh: def.fh,
-      drawScale: def.drawScale || null,
-      label: def.label || null,
-      phase: Math.random() * 10, flash: 0, vx: 0, vy: 0,
-      onGround: true, facing: -1,
-      homeX: x, homeY: y,
-      patrolMin: bounds.patrolMin, patrolMax: bounds.patrolMax,
-      hitStun: 0,
-      isBoss: bossFlag,
-      hasMelee,
-      hasSlam,
-      meleeCfg: meleeCfg || null,
-      slamState: 'idle',
-      slamT: 0,
-      slamCd,
-      slamHitDone: false,
-    };
-    this.enemies.push(enemy);
-    return enemy;
-  }
+  // ---- combat / XP (combat system) ------------------------------------------
 
-  fireEncounter(enc) {
-    if (this.firedEncounters.has(enc.id)) return;
-    this.firedEncounters.add(enc.id);
-    for (const spec of enc.enemies) {
-      this.spawnEnemy(spec.type, { x: spec.x, y: spec.y });
-    }
-  }
-
-  enterBossArena() {
-    if (!this.level || this.bossSpawned) return;
-    const b = this.level.boss;
-    this.bossSpawned = true;
-    this.levelPhase = 'boss';
-    this.arena = { minX: b.arenaMinX, maxX: b.arenaMaxX };
-    const bossType = b.type || 'boss';
-    const boss = this.spawnEnemy(bossType, {
-      x: b.spawnX,
-      y: b.spawnY ?? GROUND_Y,
-      isBoss: true,
-    });
-    if (boss) {
-      const baseHp = ENEMIES[bossType]?.hp ?? ENEMIES.boss.hp;
-      boss.hp = baseHp * (1 + (this.wave - 1) * 0.08);
-      boss.maxHp = boss.hp;
-      boss.patrolMin = b.arenaMinX + 24;
-      boss.patrolMax = b.arenaMaxX - 24;
-      boss.homeX = boss.x;
-      boss.homeY = boss.y;
-      boss.isBoss = true;
-    }
-    this.shake = Math.max(this.shake, 2.5);
-  }
-
-  // ---- combat / XP ----------------------------------------------------------
-
-  killEnemy(e, idx) {
-    this.score += e.score;
-    this.kills += 1;
-    const isBoss = enemyIsBoss(e);
-    this.burst(e.x, e.y - e.h / 2, e.color, isBoss ? 30 : 12, 140);
-    this.audio.explode(isBoss);
-    this.shake = Math.max(this.shake, isBoss ? 3 : 1.2);
-    const n = isBoss ? 6 : e.type === 'ogre' ? 3 : 1;
-    for (let i = 0; i < n && this.coins.length < MAX_COINS; i++) {
-      this.coins.push({
-        x: e.x + rand(-10, 10), y: e.y - e.h / 2,
-        vx: rand(-50, 50), vy: rand(-160, -40),
-        r: 7, xp: Math.max(1, Math.floor(e.xp / n) || 1), life: 14,
-      });
-    }
-    this.enemies.splice(idx, 1);
-    if (isBoss) {
-      this.bossDefeated = true;
-      this.clearLevel();
-    }
-  }
-
-  /**
-   * Grant XP (kills / coins / clear bonus).
-   * Mid-stage level-ups only bank unspent points — no blessing cards.
-   */
-  addXp(amount) {
-    if (amount <= 0 || !this.meta) return;
-    const before = this.meta.unspentPoints;
-    const { levelsGained } = applyXp(this.meta, amount);
-    this.pointsBankedThisStage += Math.max(0, this.meta.unspentPoints - before);
-    this._syncPlayerProgress();
-    if (levelsGained > 0) {
-      // Soft feedback only — allocation waits until between levels.
-      this.audio.levelUp();
-      this.persistMeta();
-    }
-  }
+  killEnemy(e, idx) { sysKillEnemy(this, e, idx); }
+  addXp(amount) { sysAddXp(this, amount); }
 
   /** @deprecated Blessing cards removed; use allocateAttr between levels. */
   openLevelUp() {
@@ -494,86 +318,16 @@ export class GameSession {
     if (this.screen === 'levelup') this.screen = 'play';
   }
 
-  hurtPlayer(dmg) {
-    const p = this.player;
-    if (!p || p.inv > 0) return;
-    if (hasMeleePriority(p, this.stats, PLAYER_SWORD)) return;
-    p.hp -= dmg;
-    p.inv = PLAYER_MOVE.invuln;
-    this.shake = Math.max(this.shake, 2);
-    this.audio.hurt();
-    this.burst(playerCx(p), playerCy(p), '#e74c3c', 8, 100);
-    if (p.hp <= 0) {
-      p.hp = 0;
-      this.endRun('Fallen in battle!');
-    }
-  }
+  hurtPlayer(dmg) { sysHurtPlayer(this, dmg); }
+  getAttackBoxForPlayer(p = this.player) { return sysGetAttackBox(this, p); }
+  applyAttackHits() { sysApplyAttackHits(this); }
+  doAttack() { sysDoAttack(this); }
 
-  getAttackBoxForPlayer(p = this.player) {
-    return getAttackBox(p, this.stats, PLAYER_SWORD);
-  }
+  // ---- camera ---------------------------------------------------------------
 
-  applyAttackHits() {
-    const p = this.player;
-    if (!p) return;
-    const result = resolveMeleeHits(p, this.enemies, this.stats, PLAYER_SWORD);
-    if (!result.hitAny) return;
-    for (const hit of result.hits) {
-      this.audio.hit();
-      this.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#f5e6c8', 8, 100);
-      if (hit.killed) this.killEnemy(hit.enemy, hit.index);
-    }
-    this.shake = Math.max(this.shake, p.attackAir ? 1.6 : 1.1);
-  }
+  updateCamera(dt) { updateCamera(this, dt); }
 
-  doAttack() {
-    const p = this.player;
-    if (!p) return;
-    if (!beginMeleeAttack(p, this.stats, PLAYER_SWORD)) return;
-    this.audio.slash();
-    this.applyAttackHits();
-  }
-
-  // ---- systems tick ---------------------------------------------------------
-
-  updateCamera(dt) {
-    const p = this.player;
-    const target = p.x - CAM.focusX;
-    this.cameraX = lerp(this.cameraX, target, 1 - Math.exp(-CAM.lerp * dt));
-    const camB = this.getCameraBounds();
-    this.cameraX = clamp(this.cameraX, camB.minX, camB.maxX);
-    if (p.x - this.cameraX < 40) {
-      this.cameraX = clamp(p.x - 40, camB.minX, camB.maxX);
-    }
-  }
-
-  canStandAt(x, refY) {
-    return aiCanStandAt(x, refY, this.platforms, ENEMY_AI);
-  }
-
-  updateEnemy(e, dt) {
-    return aiUpdateEnemy(e, dt, this.player, this.platforms, ENEMY_AI, {
-      gravity: PLAYER_MOVE.gravity,
-      maxFall: PLAYER_MOVE.maxFall,
-    }, e.meleeCfg || getEnemyMeleeCfg(e));
-  }
-
-  /** Encounter triggers + boss gate. */
-  updateLevelProgress() {
-    if (!this.level || this.levelPhase === 'done') return;
-    const px = this.player.x;
-
-    if (this.levelPhase === 'explore') {
-      for (const enc of this.level.encounters) {
-        if (!this.firedEncounters.has(enc.id) && px >= enc.triggerX) {
-          this.fireEncounter(enc);
-        }
-      }
-      if (this.isGateOpen() && px >= this.level.gateX) {
-        this.enterBossArena();
-      }
-    }
-  }
+  // ---- frame tick -----------------------------------------------------------
 
   /**
    * @param {number} dt
@@ -591,65 +345,25 @@ export class GameSession {
       this.doAttack();
     }
 
-    const bounds = this.getPlayerBounds();
-    const move = integratePlayerMovement(dt, {
-      ix: input.x,
-      iy: input.y,
-      wantJump: input.jump,
-    }, {
-      player: this.player,
-      stats: this.stats,
-      platforms: this.platforms,
-      cameraX: this.cameraX,
-      jumpBuffered: this.jumpBuffered,
-      jumpHeld: this.jumpHeld,
-      swordCfg: PLAYER_SWORD,
-      worldMinX: bounds.minX,
-      worldMaxX: bounds.maxX,
-      onJump: () => this.audio.jump(),
-      onFellOff: () => this.hurtPlayer(25),
-    });
-    this.jumpBuffered = move.jumpBuffered;
-    if (move.stillSwinging && !this.player.attackHitDone) this.applyAttackHits();
-
+    updatePlayer(this, dt, input);
     this.updateCamera(dt);
-    if (this.player.inv > 0) this.player.inv -= dt;
+    tickPlayerInvuln(this, dt);
 
     this.updateLevelProgress();
     if (this.screen !== 'play') return;
 
-    const pcx = playerCx(this.player);
-    const pcy = playerCy(this.player);
-
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
-      const slamHit = this.updateEnemy(e, dt);
-      // Don't cull bosses off-screen; cull far-behind fodder only
-      if (!enemyIsBoss(e) && e.x < this.cameraX - 160) {
-        this.enemies.splice(i, 1);
-        continue;
-      }
-      if (slamHit && slamHit.hit) {
-        this.hurtPlayer(slamHit.damage);
-        const kbScale = e.hasSlam ? 0.55 : 0.42;
-        this.player.vx = (slamHit.dir || 1) * slamHit.knockback * kbScale;
-        this.player.vy = e.hasSlam ? -220 : -160;
-        this.player.onGround = false;
-        this.shake = Math.max(this.shake, e.hasSlam ? 2.8 : 1.8);
-        continue;
-      }
-      // Melee enemies: damage only from telegraphed attack (not contact-only).
-      // Slimes and other contact fodder still use body overlap.
-      if (enemyUsesTelegraphedAttack(e)) continue;
-      if (circleHit(pcx, pcy, Math.min(this.player.w, this.player.h) * 0.32, e.x, e.y - e.h / 2, e.w * 0.35)) {
-        this.hurtPlayer(e.damage);
-        this.player.vx += (this.player.x < e.x ? -1 : 1) * 100;
-        this.player.vy = -160;
-        this.player.onGround = false;
-      }
-    }
+    updateEnemies(this, dt);
     if (this.screen !== 'play') return;
 
+    this._updateCoins(dt);
+    this._updateParticles(dt);
+
+    this.score += dt * 0.8;
+  }
+
+  _updateCoins(dt) {
+    const pcx = playerCx(this.player);
+    const pcy = playerCy(this.player);
     for (let i = this.coins.length - 1; i >= 0; i--) {
       const c = this.coins[i];
       c.life -= dt;
@@ -674,7 +388,9 @@ export class GameSession {
       }
       if (c.life <= 0) this.coins.splice(i, 1);
     }
+  }
 
+  _updateParticles(dt) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -684,8 +400,6 @@ export class GameSession {
       p.vy *= 0.96;
       if (p.life <= 0) this.particles.splice(i, 1);
     }
-
-    this.score += dt * 0.8;
   }
 
   // ---- test / tooling helpers -----------------------------------------------

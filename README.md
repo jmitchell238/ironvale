@@ -28,7 +28,7 @@ Medieval **2D platformer** — run, jump, and sword-slash through discrete stage
 Layered ES modules — see **[ARCHITECTURE.md](./ARCHITECTURE.md)**.
 
 ```
-app → adapters → world/GameSession → domain → config/core
+app → adapters → world/GameSession + systems → domain → config/core
 ```
 
 Sword length, body size, and draw scale are separate config axes so changing one does not break the others.
