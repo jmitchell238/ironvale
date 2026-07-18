@@ -3,7 +3,7 @@
  */
 
 import {
-  GAME_NAME, GAME_VERSION_LABEL, W, H,
+  GAME_NAME, GAME_VERSION_LABEL, W, H, ENEMIES,
 } from '../config/index.js';
 import { resizeCanvas } from '../core/math.js';
 import { GameSession } from '../world/GameSession.js';
@@ -13,6 +13,10 @@ import { createAudio } from '../adapters/audio.js';
 import { loadAllSprites } from '../adapters/sprites.js';
 import { drawSession, drawLoading, levelUpHitTest } from '../adapters/render.js';
 import { createInput } from '../adapters/input.js';
+
+function configEnemyLabel(type) {
+  return ENEMIES[type]?.label || null;
+}
 
 const cv = document.getElementById('cv');
 const stage = document.getElementById('stage');
@@ -120,8 +124,10 @@ function showClear() {
   setScreen('clear');
   const nameEl = document.getElementById('clearLevelName');
   if (nameEl) {
+    const bossType = session.level?.boss?.type;
+    const bossLabel = bossType && configEnemyLabel(bossType);
     nameEl.textContent = session.level
-      ? `${session.level.order}. ${session.level.name}`
+      ? `${session.level.order}. ${session.level.name}${bossLabel ? ' · ' + bossLabel + ' down' : ''}`
       : 'Stage complete';
   }
   document.getElementById('clearScore').textContent = String(Math.floor(session.score));

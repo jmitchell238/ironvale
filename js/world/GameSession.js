@@ -10,7 +10,7 @@
 
 import {
   PLAYER, PLAYER_BODY, PLAYER_MOVE, PLAYER_SWORD, ENEMIES, ENEMY_AI, CAM, W, GROUND_Y,
-  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, xpForLevel,
+  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, xpForLevel, enemyIsBoss,
 } from '../config/index.js';
 import { clamp, circleHit, dist, rand, lerp } from '../core/math.js';
 import {
@@ -281,6 +281,7 @@ export class GameSession {
       homePl = null;
     }
     const bounds = aiPatrolBounds(x, homePl, ENEMY_AI);
+    const bossFlag = !!opts.isBoss || enemyIsBoss(type) || !!def.isBoss;
     const enemy = {
       type, x, y, w: def.w, h: def.h,
       hp: def.hp * scale, maxHp: def.hp * scale,
@@ -288,12 +289,14 @@ export class GameSession {
       score: Math.floor(def.score * (1 + (this.wave - 1) * 0.05)),
       xp: def.xp, color: def.color, damage: def.damage,
       skin: def.skin, frames: def.frames, fw: def.fw, fh: def.fh,
+      drawScale: def.drawScale || null,
+      label: def.label || null,
       phase: Math.random() * 10, flash: 0, vx: 0, vy: 0,
       onGround: true, facing: -1,
       homeX: x, homeY: y,
       patrolMin: bounds.patrolMin, patrolMax: bounds.patrolMax,
       hitStun: 0,
-      isBoss: !!opts.isBoss || type === 'boss',
+      isBoss: bossFlag,
     };
     this.enemies.push(enemy);
     return enemy;
@@ -313,19 +316,21 @@ export class GameSession {
     this.bossSpawned = true;
     this.levelPhase = 'boss';
     this.arena = { minX: b.arenaMinX, maxX: b.arenaMaxX };
-    const boss = this.spawnEnemy(b.type || 'boss', {
+    const bossType = b.type || 'boss';
+    const boss = this.spawnEnemy(bossType, {
       x: b.spawnX,
       y: b.spawnY ?? GROUND_Y,
       isBoss: true,
     });
     if (boss) {
-      boss.hp = ENEMIES[b.type || 'boss']?.hp ?? ENEMIES.boss.hp;
-      boss.hp *= 1 + (this.wave - 1) * 0.08;
+      const baseHp = ENEMIES[bossType]?.hp ?? ENEMIES.boss.hp;
+      boss.hp = baseHp * (1 + (this.wave - 1) * 0.08);
       boss.maxHp = boss.hp;
       boss.patrolMin = b.arenaMinX + 24;
       boss.patrolMax = b.arenaMaxX - 24;
       boss.homeX = boss.x;
       boss.homeY = boss.y;
+      boss.isBoss = true;
     }
     this.shake = Math.max(this.shake, 2.5);
   }
@@ -335,7 +340,7 @@ export class GameSession {
   killEnemy(e, idx) {
     this.score += e.score;
     this.kills += 1;
-    const isBoss = e.isBoss || e.type === 'boss';
+    const isBoss = enemyIsBoss(e);
     this.burst(e.x, e.y - e.h / 2, e.color, isBoss ? 30 : 12, 140);
     this.audio.explode(isBoss);
     this.shake = Math.max(this.shake, isBoss ? 3 : 1.2);
@@ -511,7 +516,7 @@ export class GameSession {
       const e = this.enemies[i];
       this.updateEnemy(e, dt);
       // Don't cull bosses off-screen; cull far-behind fodder only
-      if (!e.isBoss && e.type !== 'boss' && e.x < this.cameraX - 160) {
+      if (!enemyIsBoss(e) && e.x < this.cameraX - 160) {
         this.enemies.splice(i, 1);
         continue;
       }

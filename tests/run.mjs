@@ -308,6 +308,33 @@ section('level shell data');
   assertEq(levels.nextLevel(levels.getLevelById('iron-gate')), null, 'campaign end');
 }
 
+section('Outer Vale prototype (P2 L1)');
+{
+  const { ENEMIES, enemyIsBoss, PLAYER_SWORD } = config;
+  const L = levels.getLevelById('outer-vale');
+  assert(L && !L.stub, 'not stub');
+  assertEq(L.boss.type, 'bandit_captain', 'bandit captain boss');
+  assert(enemyIsBoss('bandit_captain'), 'captain is boss');
+  assert(ENEMIES.bandit_captain.hp >= 100, 'captain tanky');
+  assert(ENEMIES.bandit_captain.hp < ENEMIES.boss.hp, 'baseline < late boss');
+  const plats = levels.buildLevelPlatforms(L);
+  assert(plats.length >= 10, 'authored layout depth');
+  assert(platformsChainReachable(plats, 1, 1), 'L1 jump-safe chain');
+  assert(L.encounters.length >= 5, 'teaching encounters');
+  const roster = new Set();
+  for (const enc of L.encounters) {
+    for (const sp of enc.enemies) roster.add(sp.type);
+  }
+  roster.add(L.boss.type);
+  assert(roster.has('slime'), 'has slimes');
+  assert(roster.has('bandit'), 'has bandits');
+  assert(!roster.has('skeleton'), 'no skeletons on L1');
+  assert(!roster.has('ogre'), 'no ogres on L1');
+  // Hits to kill captain at base damage (difficulty baseline signal)
+  const hits = Math.ceil(ENEMIES.bandit_captain.hp / PLAYER_SWORD.attackDamage);
+  assert(hits >= 5 && hits <= 10, 'captain ~5–10 base hits');
+}
+
 section('loadLevel + bounds + no endless waves');
 {
   const s = createSession();
@@ -348,9 +375,10 @@ section('encounters + gate + boss + clear');
   assertEq(s.levelPhase, 'boss', 'boss phase');
   assert(s.bossSpawned, 'boss spawned');
   assert(s.arena, 'arena set');
-  assert(s.enemies.some(e => e.isBoss || e.type === 'boss'), 'boss present');
+  assert(s.enemies.some(e => e.isBoss), 'boss present');
+  assert(s.enemies.some(e => e.type === 'bandit_captain'), 'captain type');
   // Defeat boss
-  const boss = s.enemies.find(e => e.isBoss || e.type === 'boss');
+  const boss = s.enemies.find(e => e.isBoss);
   const bi = s.enemies.indexOf(boss);
   s.killEnemy(boss, bi);
   assertEq(s.screen, 'clear', 'clear screen');

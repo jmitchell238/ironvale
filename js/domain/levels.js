@@ -31,64 +31,104 @@ import { makePlatform } from './platforms.js';
  * }} LevelDef
  */
 
+/**
+ * Outer Vale — P2 prototype level 1 (difficulty baseline).
+ * Teaching path: run → slash slime → jump platforms → light bandits → captain.
+ */
+const OUTER_VALE = {
+  id: 'outer-vale',
+  name: 'Outer Vale',
+  subtitle: 'Learn run, jump, and slash',
+  order: 1,
+  stub: false,
+  bounds: { minX: 0, maxX: 3200 },
+  spawn: { x: 80, y: GROUND_Y },
+  // Authored layout: gentle rises + short gaps (single-jump safe).
+  platforms: [
+    // Intro ground — run space
+    { x: -40, y: GROUND_Y, w: 480 },
+    // First teaching ledge (overlap ground so climb is free)
+    { x: 360, y: GROUND_Y - 48, w: 150 },
+    { x: 560, y: GROUND_Y, w: 260 },
+    // Low perch over continuous ground path
+    { x: 880, y: GROUND_Y, w: 220 },
+    { x: 1080, y: GROUND_Y - 50, w: 130 },
+    { x: 1260, y: GROUND_Y, w: 280 },
+    // Twin steps (short gaps, modest height)
+    { x: 1580, y: GROUND_Y - 38, w: 120 },
+    { x: 1740, y: GROUND_Y - 52, w: 120 },
+    { x: 1920, y: GROUND_Y, w: 300 },
+    // Ridge before gate
+    { x: 2260, y: GROUND_Y - 48, w: 140 },
+    { x: 2440, y: GROUND_Y, w: 300 },
+    // Boss arena floor (wide)
+    { x: 2780, y: GROUND_Y, w: 460 },
+  ],
+  encounters: [
+    // Teach slash — single slime on open ground
+    {
+      id: 'ov-slash',
+      triggerX: 200,
+      enemies: [{ type: 'slime', x: 300 }],
+    },
+    // Teach jump + elevated target
+    {
+      id: 'ov-jump',
+      triggerX: 340,
+      enemies: [{ type: 'slime', x: 430, y: GROUND_Y - 48 }],
+    },
+    // Multi slime pack
+    {
+      id: 'ov-pack',
+      triggerX: 760,
+      enemies: [
+        { type: 'slime', x: 840 },
+        { type: 'slime', x: 920 },
+      ],
+    },
+    // First bandit (light) with slime support
+    {
+      id: 'ov-bandit',
+      triggerX: 1120,
+      enemies: [
+        { type: 'bandit', x: 1220 },
+        { type: 'slime', x: 1340 },
+      ],
+    },
+    // Platform bandits — pressure while jumping
+    {
+      id: 'ov-steps',
+      triggerX: 1540,
+      enemies: [
+        { type: 'slime', x: 1630, y: GROUND_Y - 38 },
+        { type: 'bandit', x: 1800, y: GROUND_Y - 52 },
+      ],
+    },
+    // Pre-gate mixed (still baseline)
+    {
+      id: 'ov-gate-guard',
+      triggerX: 2220,
+      enemies: [
+        { type: 'bandit', x: 2320 },
+        { type: 'slime', x: 2420 },
+        { type: 'slime', x: 2520 },
+      ],
+    },
+  ],
+  gateX: 2700,
+  boss: {
+    type: 'bandit_captain',
+    arenaMinX: 2780,
+    arenaMaxX: 3180,
+    spawnX: 2980,
+    spawnY: GROUND_Y,
+  },
+  clearBonus: 100,
+};
+
 /** @type {LevelDef[]} */
 export const LEVELS = [
-  {
-    id: 'outer-vale',
-    name: 'Outer Vale',
-    subtitle: 'Learn run, jump, and slash',
-    order: 1,
-    stub: true,
-    bounds: { minX: 0, maxX: 2200 },
-    spawn: { x: 80, y: GROUND_Y },
-    platforms: [
-      { x: -40, y: GROUND_Y, w: 560 },
-      { x: 420, y: GROUND_Y - 55, w: 120 },
-      { x: 620, y: GROUND_Y, w: 280 },
-      { x: 860, y: GROUND_Y - 50, w: 110 },
-      { x: 1020, y: GROUND_Y, w: 320 },
-      { x: 1280, y: GROUND_Y - 48, w: 100 },
-      { x: 1420, y: GROUND_Y, w: 400 },
-      // Boss arena floor
-      { x: 1750, y: GROUND_Y, w: 500 },
-    ],
-    encounters: [
-      {
-        id: 'ov-1',
-        triggerX: 280,
-        enemies: [
-          { type: 'slime', x: 360 },
-          { type: 'slime', x: 420 },
-        ],
-      },
-      {
-        id: 'ov-2',
-        triggerX: 700,
-        enemies: [
-          { type: 'slime', x: 780 },
-          { type: 'bandit', x: 860 },
-        ],
-      },
-      {
-        id: 'ov-3',
-        triggerX: 1150,
-        enemies: [
-          { type: 'bandit', x: 1220 },
-          { type: 'slime', x: 1300 },
-          { type: 'slime', x: 1360 },
-        ],
-      },
-    ],
-    gateX: 1700,
-    boss: {
-      type: 'boss',
-      arenaMinX: 1750,
-      arenaMaxX: 2180,
-      spawnX: 2000,
-      spawnY: GROUND_Y,
-    },
-    clearBonus: 80,
-  },
+  OUTER_VALE,
   {
     id: 'ruined-road',
     name: 'Ruined Road',

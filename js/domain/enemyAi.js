@@ -34,7 +34,10 @@ export function aiHorizontalIntent(e, player, platforms, aiCfg) {
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
   let wantDir = 0;
 
-  if (e.type === 'boss') {
+  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain');
+
+  if (bossLike) {
+    // Flank slightly — keep pressure without overlapping the player center.
     const target = player.x + (player.x < e.x ? 70 : -70);
     wantDir = Math.abs(target - e.x) > 12 ? Math.sign(target - e.x) : 0;
   } else if (aggro) {
@@ -52,14 +55,15 @@ export function aiHorizontalIntent(e, player, platforms, aiCfg) {
     const look = e.x + wantDir * (aiCfg.lookAhead + e.w * 0.25);
     if (!aiCanStandAt(look, e.y, platforms, aiCfg)) {
       wantDir = 0;
-      if (!aggro) {
+      if (!aggro && !bossLike) {
         e.facing = -e.facing || 1;
         e.patrolMin = Math.min(e.patrolMin, e.x);
         e.patrolMax = Math.max(e.patrolMax, e.x);
       }
     }
     const pl = aiPlatformUnder(e, platforms);
-    if (pl && e.type !== 'boss') {
+    // Bosses may walk full arena floor; fodder stays ledge-safe.
+    if (pl && !bossLike) {
       const edgeL = pl.x + aiCfg.ledgeMargin;
       const edgeR = pl.x + pl.w - aiCfg.ledgeMargin;
       if (wantDir < 0 && e.x <= edgeL + 2) wantDir = 0;
@@ -74,8 +78,9 @@ export function aiMoveSpeed(e, player, aiCfg) {
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
+  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain');
   let speed = e.speed;
-  if (!aggro && e.type !== 'boss') speed *= aiCfg.patrolSpeedMul;
+  if (!aggro && !bossLike) speed *= aiCfg.patrolSpeedMul;
   return speed;
 }
 

@@ -157,7 +157,12 @@ export function drawEnemy(ctx, e, cam, t) {
   const key = 'enemy/' + (e.skin || 'slime');
   const entry = getSprite(key);
   const frame = entry && entry.meta ? animFrame(entry.meta, e.phase * 0.5, 1) : 0;
-  const scale = e.type === 'boss' ? 1.6 : e.type === 'ogre' ? 1.35 : 1.3;
+  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain');
+  const scale = e.drawScale
+    || (e.type === 'boss' ? 1.6
+      : e.type === 'bandit_captain' ? 1.5
+      : e.type === 'ogre' ? 1.35
+      : 1.3);
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -174,7 +179,7 @@ export function drawEnemy(ctx, e, cam, t) {
     ctx.fillRect(sx - e.w / 2, e.y - e.h, e.w, e.h);
   }
 
-  if (e.type === 'boss' || e.type === 'ogre' || e.hp < e.maxHp * 0.95) {
+  if (bossLike || e.type === 'ogre' || e.hp < e.maxHp * 0.95) {
     const bw = Math.max(e.w, 28);
     const ratio = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';

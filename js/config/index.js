@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '1.2.000';
+export const GAME_VERSION = '1.2.100';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 
@@ -97,8 +97,26 @@ export const ENEMIES = {
   bandit:   { w: 28, h: 42, hp: 28, speed: 70, score: 16, xp: 3, color: '#8b0000', damage: 14, skin: 'bandit',   frames: 4, fw: 40, fh: 48 },
   skeleton: { w: 26, h: 42, hp: 22, speed: 55, score: 14, xp: 3, color: '#c8c0a8', damage: 12, skin: 'skeleton', frames: 4, fw: 40, fh: 48 },
   ogre:     { w: 44, h: 48, hp: 90, speed: 32, score: 40, xp: 7, color: '#5a7a3a', damage: 22, skin: 'ogre',     frames: 4, fw: 56, fh: 56 },
-  boss:     { w: 52, h: 54, hp: 280, speed: 38, score: 200, xp: 25, color: '#5a7a3a', damage: 26, skin: 'ogre', frames: 4, fw: 56, fh: 56 },
+  /** Generic late-game brute (legacy / Iron Gate). */
+  boss:     { w: 52, h: 54, hp: 280, speed: 38, score: 200, xp: 25, color: '#5a7a3a', damage: 26, skin: 'ogre', frames: 4, fw: 56, fh: 56, isBoss: true },
+  /** Outer Vale end boss — larger bandit, baseline difficulty. */
+  bandit_captain: {
+    w: 34, h: 48, hp: 140, speed: 58, score: 120, xp: 15,
+    color: '#5c0a0a', damage: 18, skin: 'bandit', frames: 4, fw: 40, fh: 48,
+    isBoss: true, drawScale: 1.5, label: 'Bandit Captain',
+  },
 };
+
+/** True for stage bosses (clears level on death). */
+export function enemyIsBoss(typeOrEnemy) {
+  if (!typeOrEnemy) return false;
+  if (typeof typeOrEnemy === 'object') {
+    if (typeOrEnemy.isBoss) return true;
+    typeOrEnemy = typeOrEnemy.type;
+  }
+  const def = ENEMIES[typeOrEnemy];
+  return !!(def && def.isBoss) || typeOrEnemy === 'boss';
+}
 
 export const UPGRADES = [
   { id: 'dmg',   name: 'Sharper Steel', desc: '+20% sword damage',   icon: '⚔', stack: true },
