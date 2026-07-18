@@ -157,9 +157,11 @@ export function drawEnemy(ctx, e, cam, t) {
   const key = 'enemy/' + (e.skin || 'slime');
   const entry = getSprite(key);
   const frame = entry && entry.meta ? animFrame(entry.meta, e.phase * 0.5, 1) : 0;
-  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain');
+  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
+    || e.type === 'skeleton_champion');
   const scale = e.drawScale
     || (e.type === 'boss' ? 1.6
+      : e.type === 'skeleton_champion' ? 1.55
       : e.type === 'bandit_captain' ? 1.5
       : e.type === 'ogre' ? 1.35
       : 1.3);

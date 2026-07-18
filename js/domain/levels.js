@@ -126,53 +126,117 @@ const OUTER_VALE = {
   clearBonus: 100,
 };
 
+/**
+ * Ruined Road — P2 prototype level 2 (harder than Outer Vale).
+ * Tighter platforms, skeleton-heavy roster, skeleton champion boss.
+ */
+const RUINED_ROAD = {
+  id: 'ruined-road',
+  name: 'Ruined Road',
+  subtitle: 'Tighter path — bones and broken stone',
+  order: 2,
+  stub: false,
+  bounds: { minX: 0, maxX: 3320 },
+  spawn: { x: 80, y: GROUND_Y },
+  // Authored layout: narrower ledges, more height changes than L1 (jump-safe).
+  platforms: [
+    // Short intro stretch
+    { x: -40, y: GROUND_Y, w: 320 },
+    // Overlapped tight rise
+    { x: 250, y: GROUND_Y - 52, w: 115 },
+    { x: 420, y: GROUND_Y, w: 150 },
+    // Elevated hop chain
+    { x: 620, y: GROUND_Y - 44, w: 100 },
+    { x: 770, y: GROUND_Y - 60, w: 100 },
+    { x: 920, y: GROUND_Y, w: 160 },
+    // Crumble steps (narrow)
+    { x: 1130, y: GROUND_Y - 48, w: 100 },
+    { x: 1280, y: GROUND_Y - 36, w: 100 },
+    { x: 1430, y: GROUND_Y - 56, w: 100 },
+    { x: 1580, y: GROUND_Y, w: 170 },
+    // Twin ridge (vertical pressure)
+    { x: 1800, y: GROUND_Y - 48, w: 105 },
+    { x: 1955, y: GROUND_Y - 62, w: 100 },
+    { x: 2110, y: GROUND_Y, w: 160 },
+    // Pre-gate gauntlet
+    { x: 2320, y: GROUND_Y - 50, w: 110 },
+    { x: 2480, y: GROUND_Y - 38, w: 110 },
+    { x: 2640, y: GROUND_Y, w: 180 },
+    // Boss arena floor
+    { x: 2860, y: GROUND_Y, w: 420 },
+  ],
+  encounters: [
+    // First skeleton on open ground
+    {
+      id: 'rr-bones',
+      triggerX: 140,
+      enemies: [{ type: 'skeleton', x: 230 }],
+    },
+    // Elevated skeleton + slime support
+    {
+      id: 'rr-rise',
+      triggerX: 220,
+      enemies: [
+        { type: 'skeleton', x: 300, y: GROUND_Y - 52 },
+        { type: 'slime', x: 480 },
+      ],
+    },
+    // Hop-chain pressure
+    {
+      id: 'rr-hops',
+      triggerX: 560,
+      enemies: [
+        { type: 'skeleton', x: 670, y: GROUND_Y - 44 },
+        { type: 'skeleton', x: 820, y: GROUND_Y - 60 },
+      ],
+    },
+    // Crumble steps — mixed
+    {
+      id: 'rr-steps',
+      triggerX: 1060,
+      enemies: [
+        { type: 'skeleton', x: 1180, y: GROUND_Y - 48 },
+        { type: 'bandit', x: 1330, y: GROUND_Y - 36 },
+        { type: 'skeleton', x: 1480, y: GROUND_Y - 56 },
+      ],
+    },
+    // Twin ridge — denser
+    {
+      id: 'rr-ridge',
+      triggerX: 1720,
+      enemies: [
+        { type: 'skeleton', x: 1850, y: GROUND_Y - 48 },
+        { type: 'skeleton', x: 2005, y: GROUND_Y - 62 },
+        { type: 'bandit', x: 2180 },
+      ],
+    },
+    // Pre-gate gauntlet
+    {
+      id: 'rr-gate-guard',
+      triggerX: 2260,
+      enemies: [
+        { type: 'skeleton', x: 2370, y: GROUND_Y - 50 },
+        { type: 'skeleton', x: 2530, y: GROUND_Y - 38 },
+        { type: 'bandit', x: 2700 },
+        { type: 'skeleton', x: 2780 },
+      ],
+    },
+  ],
+  gateX: 2780,
+  boss: {
+    type: 'skeleton_champion',
+    arenaMinX: 2860,
+    arenaMaxX: 3240,
+    spawnX: 3060,
+    spawnY: GROUND_Y,
+  },
+  clearBonus: 125,
+};
+
 /** @type {LevelDef[]} */
 export const LEVELS = [
   OUTER_VALE,
-  {
-    id: 'ruined-road',
-    name: 'Ruined Road',
-    subtitle: 'Stub — tighter path (P2)',
-    order: 2,
-    stub: true,
-    bounds: { minX: 0, maxX: 1800 },
-    spawn: { x: 80, y: GROUND_Y },
-    platforms: [
-      { x: -40, y: GROUND_Y, w: 400 },
-      { x: 300, y: GROUND_Y - 50, w: 100 },
-      { x: 480, y: GROUND_Y, w: 220 },
-      { x: 760, y: GROUND_Y - 55, w: 96 },
-      { x: 920, y: GROUND_Y, w: 280 },
-      { x: 1300, y: GROUND_Y, w: 520 },
-    ],
-    encounters: [
-      {
-        id: 'rr-1',
-        triggerX: 200,
-        enemies: [
-          { type: 'skeleton', x: 280 },
-          { type: 'slime', x: 340 },
-        ],
-      },
-      {
-        id: 'rr-2',
-        triggerX: 600,
-        enemies: [
-          { type: 'skeleton', x: 700 },
-          { type: 'bandit', x: 780 },
-        ],
-      },
-    ],
-    gateX: 1250,
-    boss: {
-      type: 'boss',
-      arenaMinX: 1300,
-      arenaMaxX: 1750,
-      spawnX: 1550,
-      spawnY: GROUND_Y,
-    },
-    clearBonus: 100,
-  },
+  RUINED_ROAD,
   {
     id: 'iron-gate',
     name: 'Iron Gate',

@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '1.2.100';
+export const GAME_VERSION = '1.2.200';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 
@@ -104,6 +104,12 @@ export const ENEMIES = {
     w: 34, h: 48, hp: 140, speed: 58, score: 120, xp: 15,
     color: '#5c0a0a', damage: 18, skin: 'bandit', frames: 4, fw: 40, fh: 48,
     isBoss: true, drawScale: 1.5, label: 'Bandit Captain',
+  },
+  /** Ruined Road end boss — elite skeleton, harder than captain. */
+  skeleton_champion: {
+    w: 32, h: 48, hp: 190, speed: 68, score: 150, xp: 18,
+    color: '#e8e0c8', damage: 20, skin: 'skeleton', frames: 4, fw: 40, fh: 48,
+    isBoss: true, drawScale: 1.55, label: 'Skeleton Champion',
   },
 };
 

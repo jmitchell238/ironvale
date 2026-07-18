@@ -34,7 +34,8 @@ export function aiHorizontalIntent(e, player, platforms, aiCfg) {
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
   let wantDir = 0;
 
-  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain');
+  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
+    || e.type === 'skeleton_champion');
 
   if (bossLike) {
     // Flank slightly — keep pressure without overlapping the player center.
@@ -78,7 +79,8 @@ export function aiMoveSpeed(e, player, aiCfg) {
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
-  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain');
+  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
+    || e.type === 'skeleton_champion');
   let speed = e.speed;
   if (!aggro && !bossLike) speed *= aiCfg.patrolSpeedMul;
   return speed;

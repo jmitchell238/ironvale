@@ -385,6 +385,53 @@ section('encounters + gate + boss + clear');
   assert(s.bossDefeated, 'boss down');
 }
 
+section('Ruined Road prototype (P2 L2)');
+{
+  const { ENEMIES, enemyIsBoss, PLAYER_SWORD } = config;
+  const L = levels.getLevelById('ruined-road');
+  assert(L && !L.stub, 'not stub');
+  assertEq(L.boss.type, 'skeleton_champion', 'skeleton champion boss');
+  assert(enemyIsBoss('skeleton_champion'), 'champion is boss');
+  assert(ENEMIES.skeleton_champion.hp > ENEMIES.bandit_captain.hp, 'harder than captain');
+  assert(ENEMIES.skeleton_champion.hp < ENEMIES.boss.hp, 'easier than late boss');
+  const plats = levels.buildLevelPlatforms(L);
+  assert(plats.length >= 12, 'authored layout depth');
+  assert(platformsChainReachable(plats, 1, 1), 'L2 jump-safe chain');
+  // Tighter mean platform width than Outer Vale teaching path
+  const L1 = levels.getLevelById('outer-vale');
+  const mean = (list) => list.reduce((a, p) => a + p.w, 0) / list.length;
+  assert(mean(plats) < mean(levels.buildLevelPlatforms(L1)), 'tighter plats than L1');
+  assert(L.encounters.length >= 5, 'enough encounters');
+  const roster = new Set();
+  for (const enc of L.encounters) {
+    for (const sp of enc.enemies) roster.add(sp.type);
+  }
+  roster.add(L.boss.type);
+  assert(roster.has('skeleton'), 'has skeletons');
+  assert(roster.has('skeleton_champion'), 'has champion');
+  assert(!roster.has('ogre'), 'no ogres on L2');
+  const skelCount = L.encounters.reduce(
+    (n, enc) => n + enc.enemies.filter(e => e.type === 'skeleton').length, 0
+  );
+  assert(skelCount >= 8, 'skeleton-heavy roster');
+  const hits = Math.ceil(ENEMIES.skeleton_champion.hp / PLAYER_SWORD.attackDamage);
+  assert(hits >= 8 && hits <= 12, 'champion ~8–12 base hits');
+  // Session: load + boss type + clear
+  const s = createSession();
+  assert(s.loadLevel('ruined-road'), 'load L2');
+  assertEq(s.wave, 2, 'stage order 2');
+  s.enemies.length = 0;
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  assert(s.isGateOpen(), 'gate open');
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 'boss phase');
+  assert(s.enemies.some(e => e.type === 'skeleton_champion'), 'champion type');
+  const boss = s.enemies.find(e => e.isBoss);
+  s.killEnemy(boss, s.enemies.indexOf(boss));
+  assertEq(s.screen, 'clear', 'clear screen');
+}
+
 section('fail screen');
 {
   const s = createSession();
