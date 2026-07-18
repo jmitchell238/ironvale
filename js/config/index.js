@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '1.2.200';
+export const GAME_VERSION = '1.2.300';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 
@@ -111,6 +111,27 @@ export const ENEMIES = {
     color: '#e8e0c8', damage: 20, skin: 'skeleton', frames: 4, fw: 40, fh: 48,
     isBoss: true, drawScale: 1.55, label: 'Skeleton Champion',
   },
+  /** Iron Gate end boss — first real wall; telegraphed slams. */
+  ogre_warchief: {
+    w: 54, h: 56, hp: 260, speed: 34, score: 220, xp: 28,
+    color: '#2f4a14', damage: 24, skin: 'ogre', frames: 4, fw: 56, fh: 56,
+    isBoss: true, drawScale: 1.75, label: 'Ogre War-Chief', hasSlam: true,
+  },
+};
+
+/**
+ * Telegraphed slam (war-chief / future slam bosses).
+ * Windup shows telegraph; active frames deal damage once.
+ */
+export const BOSS_SLAM = {
+  range: 78,
+  windup: 0.58,
+  active: 0.20,
+  recover: 0.70,
+  cooldown: 1.25,
+  damageMul: 1.4,
+  knockback: 300,
+  aggroY: 55,
 };
 
 /** True for stage bosses (clears level on death). */

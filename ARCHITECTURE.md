@@ -2,7 +2,7 @@
 
 Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
 
-**Version:** 1.2.200 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 1.2.300 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -181,7 +181,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **P1 Level shell** | Done (v1.2) | Finite stages, gate, boss arena, clear/fail, select |
 | **P2 L1 Outer Vale** | Done (v1.2.100) | Teaching layout, slimes + light bandits, bandit captain |
 | **P2 L2 Ruined Road** | Done (v1.2.200) | Tighter platforms, skeletons, skeleton champion |
-| **P2 L3 Iron Gate** | Planned | Ogres + war-chief, campaign clear prototype |
+| **P2 L3 Iron Gate** | Done (v1.2.300) | Ogres + war-chief telegraphed slams, campaign clear |
 | **P3 RPG** | Planned | XP points **between levels only** |
 | **P4 Scale** | Planned | ~10 levels |
 

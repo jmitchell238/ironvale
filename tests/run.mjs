@@ -43,7 +43,9 @@ const {
   hasMeleePriority, tickMeleeAttack, combatAttackDuration,
 } = combat;
 
-const { aiCanStandAt, aiUpdateEnemy } = enemyAi;
+const {
+  aiCanStandAt, aiUpdateEnemy, tickEnemySlam, enemyUsesTelegraphedSlam, enemySlamBusy,
+} = enemyAi;
 const { makePlatform, platformsChainReachable, canReachPlatform } = platforms;
 
 function createSession() {
@@ -385,6 +387,39 @@ section('encounters + gate + boss + clear');
   assert(s.bossDefeated, 'boss down');
 }
 
+section('pure telegraphed slam (war-chief)');
+{
+  const { BOSS_SLAM, ENEMIES } = config;
+  const player = { x: 200, y: GROUND_Y, w: 28, h: 48 };
+  const e = {
+    type: 'ogre_warchief', x: 200, y: GROUND_Y, w: 54, h: 56,
+    damage: ENEMIES.ogre_warchief.damage, hasSlam: true,
+    slamState: 'idle', slamT: 0, slamCd: 0, slamHitDone: false,
+    hitStun: 0, facing: 1,
+  };
+  assert(enemyUsesTelegraphedSlam(e), 'uses slam');
+  // Enter windup when in range
+  let hit = tickEnemySlam(e, 0.016, player, BOSS_SLAM);
+  assertEq(e.slamState, 'windup', 'windup start');
+  assert(!hit, 'no hit in windup');
+  assert(enemySlamBusy(e), 'busy windup');
+  // Drain windup
+  hit = tickEnemySlam(e, BOSS_SLAM.windup + 0.01, player, BOSS_SLAM);
+  assertEq(e.slamState, 'slam', 'slam phase');
+  // Active frames hit once
+  hit = tickEnemySlam(e, 0.02, player, BOSS_SLAM);
+  assert(hit && hit.hit, 'slam hits');
+  assert(hit.damage > e.damage, 'slam heavier than contact dmg');
+  const again = tickEnemySlam(e, 0.02, player, BOSS_SLAM);
+  assert(!again, 'no multi-hit same slam');
+  // Finish slam → recover
+  tickEnemySlam(e, BOSS_SLAM.active + 0.05, player, BOSS_SLAM);
+  assertEq(e.slamState, 'recover', 'recover');
+  tickEnemySlam(e, BOSS_SLAM.recover + 0.05, player, BOSS_SLAM);
+  assertEq(e.slamState, 'idle', 'back idle');
+  assert(e.slamCd > 0, 'cooldown');
+}
+
 section('Ruined Road prototype (P2 L2)');
 {
   const { ENEMIES, enemyIsBoss, PLAYER_SWORD } = config;
@@ -428,6 +463,54 @@ section('Ruined Road prototype (P2 L2)');
   assertEq(s.levelPhase, 'boss', 'boss phase');
   assert(s.enemies.some(e => e.type === 'skeleton_champion'), 'champion type');
   const boss = s.enemies.find(e => e.isBoss);
+  s.killEnemy(boss, s.enemies.indexOf(boss));
+  assertEq(s.screen, 'clear', 'clear screen');
+}
+
+section('Iron Gate prototype (P2 L3)');
+{
+  const { ENEMIES, enemyIsBoss, PLAYER_SWORD } = config;
+  const L = levels.getLevelById('iron-gate');
+  assert(L && !L.stub, 'not stub');
+  assertEq(L.boss.type, 'ogre_warchief', 'war-chief boss');
+  assert(enemyIsBoss('ogre_warchief'), 'warchief is boss');
+  assert(ENEMIES.ogre_warchief.hasSlam, 'hasSlam flag');
+  assert(ENEMIES.ogre_warchief.hp > ENEMIES.skeleton_champion.hp, 'harder than L2 boss');
+  assert(ENEMIES.ogre_warchief.hp <= ENEMIES.boss.hp, '≤ legacy brute');
+  const plats = levels.buildLevelPlatforms(L);
+  assert(plats.length >= 12, 'authored layout depth');
+  assert(platformsChainReachable(plats, 1, 1), 'L3 jump-safe chain');
+  assert(L.encounters.length >= 6, 'pressure encounters');
+  const roster = new Set();
+  let ogreCount = 0;
+  for (const enc of L.encounters) {
+    for (const sp of enc.enemies) {
+      roster.add(sp.type);
+      if (sp.type === 'ogre') ogreCount++;
+    }
+  }
+  roster.add(L.boss.type);
+  assert(roster.has('ogre'), 'has ogres');
+  assert(roster.has('ogre_warchief'), 'has war-chief');
+  assert(ogreCount >= 5, 'ogre pressure');
+  const hits = Math.ceil(ENEMIES.ogre_warchief.hp / PLAYER_SWORD.attackDamage);
+  assert(hits >= 10 && hits <= 16, 'warchief ~10–16 base hits (wall)');
+  // Session: load + slam boss + campaign clear (no next)
+  const s = createSession();
+  assert(s.loadLevel('iron-gate'), 'load L3');
+  assertEq(s.wave, 3, 'stage order 3');
+  s.enemies.length = 0;
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  assert(s.isGateOpen(), 'gate open');
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 'boss phase');
+  const boss = s.enemies.find(e => e.type === 'ogre_warchief');
+  assert(boss, 'warchief present');
+  assert(boss.hasSlam, 'spawned hasSlam');
+  assert(enemyUsesTelegraphedSlam(boss), 'telegraph slam');
+  // No next stage → campaign prototype complete
+  assertEq(s.getNextLevel(), null, 'campaign clear after L3');
   s.killEnemy(boss, s.enemies.indexOf(boss));
   assertEq(s.screen, 'clear', 'clear screen');
 }

@@ -10,13 +10,15 @@
 
 import {
   PLAYER, PLAYER_BODY, PLAYER_MOVE, PLAYER_SWORD, ENEMIES, ENEMY_AI, CAM, W, GROUND_Y,
-  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, xpForLevel, enemyIsBoss,
+  MAX_ENEMIES, MAX_COINS, MAX_PARTICLES, xpForLevel, enemyIsBoss, BOSS_SLAM,
 } from '../config/index.js';
 import { clamp, circleHit, dist, rand, lerp } from '../core/math.js';
 import {
   beginMeleeAttack, resolveMeleeHits, hasMeleePriority, getAttackBox,
 } from '../domain/combat.js';
-import { aiUpdateEnemy, aiPatrolBounds, aiCanStandAt } from '../domain/enemyAi.js';
+import {
+  aiUpdateEnemy, aiPatrolBounds, aiCanStandAt, enemyUsesTelegraphedSlam,
+} from '../domain/enemyAi.js';
 import { makePlatform, canReachPlatform, platformsChainReachable } from '../domain/platforms.js';
 import { makePlayer, playerCx, playerCy, integratePlayerMovement } from '../domain/player.js';
 import { defaultStats, pickLevelUpChoices, applyUpgradeToRun } from '../domain/upgrades.js';
@@ -297,6 +299,11 @@ export class GameSession {
       patrolMin: bounds.patrolMin, patrolMax: bounds.patrolMax,
       hitStun: 0,
       isBoss: bossFlag,
+      hasSlam: !!(def.hasSlam || opts.hasSlam),
+      slamState: 'idle',
+      slamT: 0,
+      slamCd: bossFlag && (def.hasSlam || opts.hasSlam) ? 0.8 : 0,
+      slamHitDone: false,
     };
     this.enemies.push(enemy);
     return enemy;
@@ -443,10 +450,10 @@ export class GameSession {
   }
 
   updateEnemy(e, dt) {
-    aiUpdateEnemy(e, dt, this.player, this.platforms, ENEMY_AI, {
+    return aiUpdateEnemy(e, dt, this.player, this.platforms, ENEMY_AI, {
       gravity: PLAYER_MOVE.gravity,
       maxFall: PLAYER_MOVE.maxFall,
-    });
+    }, BOSS_SLAM);
   }
 
   /** Encounter triggers + boss gate. */
@@ -514,12 +521,22 @@ export class GameSession {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      this.updateEnemy(e, dt);
+      const slamHit = this.updateEnemy(e, dt);
       // Don't cull bosses off-screen; cull far-behind fodder only
       if (!enemyIsBoss(e) && e.x < this.cameraX - 160) {
         this.enemies.splice(i, 1);
         continue;
       }
+      if (slamHit && slamHit.hit) {
+        this.hurtPlayer(slamHit.damage);
+        this.player.vx = (slamHit.dir || 1) * slamHit.knockback * 0.55;
+        this.player.vy = -220;
+        this.player.onGround = false;
+        this.shake = Math.max(this.shake, 2.8);
+        continue;
+      }
+      // Slam bosses: damage only from telegraphed slam (not contact-only).
+      if (enemyUsesTelegraphedSlam(e)) continue;
       if (circleHit(pcx, pcy, Math.min(this.player.w, this.player.h) * 0.32, e.x, e.y - e.h / 2, e.w * 0.35)) {
         this.hurtPlayer(e.damage);
         this.player.vx += (this.player.x < e.x ? -1 : 1) * 100;

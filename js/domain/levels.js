@@ -233,55 +233,130 @@ const RUINED_ROAD = {
   clearBonus: 125,
 };
 
+/**
+ * Iron Gate — P2 prototype level 3 (first real wall).
+ * Pressure packs + ogres, ogre war-chief with telegraphed slams.
+ * Campaign clear for v1 prototype after this stage.
+ */
+const IRON_GATE = {
+  id: 'iron-gate',
+  name: 'Iron Gate',
+  subtitle: 'First wall — ogres and iron',
+  order: 3,
+  stub: false,
+  bounds: { minX: 0, maxX: 3580 },
+  spawn: { x: 80, y: GROUND_Y },
+  // Wider corridors for ogres; elevated harassment; dense pressure.
+  platforms: [
+    { x: -40, y: GROUND_Y, w: 360 },
+    { x: 280, y: GROUND_Y - 48, w: 120 },
+    { x: 450, y: GROUND_Y, w: 200 },
+    { x: 700, y: GROUND_Y - 40, w: 110 },
+    { x: 860, y: GROUND_Y - 55, w: 110 },
+    { x: 1020, y: GROUND_Y, w: 220 },
+    // Ogre corridor
+    { x: 1300, y: GROUND_Y, w: 280 },
+    // Pressure steps
+    { x: 1520, y: GROUND_Y - 46, w: 110 },
+    { x: 1680, y: GROUND_Y - 36, w: 110 },
+    { x: 1840, y: GROUND_Y - 52, w: 110 },
+    { x: 2000, y: GROUND_Y, w: 200 },
+    // High perch + drop
+    { x: 2240, y: GROUND_Y - 50, w: 120 },
+    { x: 2420, y: GROUND_Y, w: 180 },
+    // Pre-gate choke
+    { x: 2640, y: GROUND_Y - 44, w: 115 },
+    { x: 2810, y: GROUND_Y, w: 200 },
+    // War-chief arena (wide)
+    { x: 3060, y: GROUND_Y, w: 480 },
+  ],
+  encounters: [
+    // Warm-up pressure: bandit + skeleton
+    {
+      id: 'ig-watch',
+      triggerX: 160,
+      enemies: [
+        { type: 'bandit', x: 260 },
+        { type: 'skeleton', x: 340, y: GROUND_Y - 48 },
+      ],
+    },
+    // First ogre with support
+    {
+      id: 'ig-first-ogre',
+      triggerX: 400,
+      enemies: [
+        { type: 'ogre', x: 540 },
+        { type: 'bandit', x: 620 },
+      ],
+    },
+    // Hop chain mixed
+    {
+      id: 'ig-hops',
+      triggerX: 640,
+      enemies: [
+        { type: 'skeleton', x: 750, y: GROUND_Y - 40 },
+        { type: 'bandit', x: 910, y: GROUND_Y - 55 },
+        { type: 'skeleton', x: 1100 },
+      ],
+    },
+    // Ogre corridor — heavy
+    {
+      id: 'ig-corridor',
+      triggerX: 1200,
+      enemies: [
+        { type: 'ogre', x: 1380 },
+        { type: 'ogre', x: 1500 },
+        { type: 'bandit', x: 1460 },
+      ],
+    },
+    // Steps pressure
+    {
+      id: 'ig-steps',
+      triggerX: 1480,
+      enemies: [
+        { type: 'skeleton', x: 1570, y: GROUND_Y - 46 },
+        { type: 'bandit', x: 1730, y: GROUND_Y - 36 },
+        { type: 'ogre', x: 1920, y: GROUND_Y - 52 },
+      ],
+    },
+    // Perch + ground crush
+    {
+      id: 'ig-perch',
+      triggerX: 2140,
+      enemies: [
+        { type: 'bandit', x: 2300, y: GROUND_Y - 50 },
+        { type: 'ogre', x: 2500 },
+        { type: 'skeleton', x: 2560 },
+      ],
+    },
+    // Gate guards — densest pack
+    {
+      id: 'ig-gate-guard',
+      triggerX: 2580,
+      enemies: [
+        { type: 'ogre', x: 2700, y: GROUND_Y - 44 },
+        { type: 'bandit', x: 2880 },
+        { type: 'skeleton', x: 2940 },
+        { type: 'ogre', x: 2960 },
+      ],
+    },
+  ],
+  gateX: 2980,
+  boss: {
+    type: 'ogre_warchief',
+    arenaMinX: 3060,
+    arenaMaxX: 3500,
+    spawnX: 3300,
+    spawnY: GROUND_Y,
+  },
+  clearBonus: 150,
+};
+
 /** @type {LevelDef[]} */
 export const LEVELS = [
   OUTER_VALE,
   RUINED_ROAD,
-  {
-    id: 'iron-gate',
-    name: 'Iron Gate',
-    subtitle: 'Stub — first wall (P2)',
-    order: 3,
-    stub: true,
-    bounds: { minX: 0, maxX: 2000 },
-    spawn: { x: 80, y: GROUND_Y },
-    platforms: [
-      { x: -40, y: GROUND_Y, w: 480 },
-      { x: 380, y: GROUND_Y - 52, w: 110 },
-      { x: 560, y: GROUND_Y, w: 300 },
-      { x: 920, y: GROUND_Y - 55, w: 120 },
-      { x: 1100, y: GROUND_Y, w: 260 },
-      { x: 1450, y: GROUND_Y, w: 580 },
-    ],
-    encounters: [
-      {
-        id: 'ig-1',
-        triggerX: 220,
-        enemies: [
-          { type: 'bandit', x: 300 },
-          { type: 'ogre', x: 400 },
-        ],
-      },
-      {
-        id: 'ig-2',
-        triggerX: 700,
-        enemies: [
-          { type: 'ogre', x: 820 },
-          { type: 'skeleton', x: 900 },
-          { type: 'bandit', x: 980 },
-        ],
-      },
-    ],
-    gateX: 1400,
-    boss: {
-      type: 'boss',
-      arenaMinX: 1450,
-      arenaMaxX: 1950,
-      spawnX: 1700,
-      spawnY: GROUND_Y,
-    },
-    clearBonus: 150,
-  },
+  IRON_GATE,
 ];
 
 /**

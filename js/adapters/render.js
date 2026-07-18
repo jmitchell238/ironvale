@@ -158,13 +158,40 @@ export function drawEnemy(ctx, e, cam, t) {
   const entry = getSprite(key);
   const frame = entry && entry.meta ? animFrame(entry.meta, e.phase * 0.5, 1) : 0;
   const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
-    || e.type === 'skeleton_champion');
+    || e.type === 'skeleton_champion' || e.type === 'ogre_warchief');
   const scale = e.drawScale
     || (e.type === 'boss' ? 1.6
+      : e.type === 'ogre_warchief' ? 1.75
       : e.type === 'skeleton_champion' ? 1.55
       : e.type === 'bandit_captain' ? 1.5
       : e.type === 'ogre' ? 1.35
       : 1.3);
+
+  // Slam telegraph: ground warning + body flash during windup/active
+  if (e.slamState === 'windup' || e.slamState === 'slam') {
+    const face = e.facing || -1;
+    const range = 78;
+    const warnX = sx + face * (e.w * 0.2 + range * 0.45);
+    const pulse = e.slamState === 'windup'
+      ? 0.35 + 0.35 * Math.sin(t * 18)
+      : 0.7;
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = e.slamState === 'slam' ? 'rgba(220,40,30,0.55)' : 'rgba(255,90,40,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(warnX, e.y - 2, range * 0.55, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (e.slamState === 'windup') {
+      ctx.strokeStyle = 'rgba(255,200,80,0.85)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.ellipse(warnX, e.y - 2, range * 0.55, 7, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -173,11 +200,13 @@ export function drawEnemy(ctx, e, cam, t) {
   ctx.fill();
   ctx.restore();
 
+  const slamFlash = e.slamState === 'windup' ? 0.55 + 0.25 * Math.sin(t * 20) : 1;
+  const alpha = e.flash > 0 ? 0.5 : slamFlash;
   const ok = drawSprite(ctx, key, frame, e.x, e.y + 2, {
-    scale, flip: (e.facing || -1) > 0, cam, alpha: e.flash > 0 ? 0.5 : 1,
+    scale, flip: (e.facing || -1) > 0, cam, alpha,
   });
   if (!ok) {
-    ctx.fillStyle = e.color;
+    ctx.fillStyle = e.slamState === 'windup' ? '#c44' : e.color;
     ctx.fillRect(sx - e.w / 2, e.y - e.h, e.w, e.h);
   }
 
@@ -188,6 +217,19 @@ export function drawEnemy(ctx, e, cam, t) {
     ctx.fillRect(sx - bw / 2, e.y - e.h * scale * 0.55 - 10, bw, 4);
     ctx.fillStyle = ratio > 0.35 ? '#7dffa0' : '#e74c3c';
     ctx.fillRect(sx - bw / 2, e.y - e.h * scale * 0.55 - 10, bw * ratio, 4);
+  }
+
+  if (e.label && bossLike) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    const label = e.label;
+    ctx.font = 'bold 11px system-ui,sans-serif';
+    const tw = ctx.measureText(label).width;
+    const ly = e.y - e.h * scale * 0.55 - 22;
+    ctx.fillRect(sx - tw / 2 - 4, ly - 10, tw + 8, 14);
+    ctx.fillStyle = '#f5e6c8';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, sx, ly);
+    ctx.textAlign = 'left';
   }
 }
 

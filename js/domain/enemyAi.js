@@ -3,6 +3,22 @@
  * Caller owns entity arrays and side effects.
  */
 
+/** Boss-style chase / arena walk (not ledge-bound fodder). */
+export function enemyIsBossLike(e) {
+  if (!e) return false;
+  if (e.isBoss) return true;
+  const t = e.type;
+  return t === 'boss' || t === 'bandit_captain'
+    || t === 'skeleton_champion' || t === 'ogre_warchief';
+}
+
+/** Uses windup → slam → recover instead of contact-only damage. */
+export function enemyUsesTelegraphedSlam(e) {
+  if (!e) return false;
+  if (e.hasSlam) return true;
+  return e.type === 'ogre_warchief';
+}
+
 export function aiCanStandAt(x, refY, platforms, aiCfg) {
   const m = aiCfg.ledgeMargin != null ? aiCfg.ledgeMargin : 10;
   if (!platforms) return false;
@@ -34,8 +50,7 @@ export function aiHorizontalIntent(e, player, platforms, aiCfg) {
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
   let wantDir = 0;
 
-  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
-    || e.type === 'skeleton_champion');
+  const bossLike = enemyIsBossLike(e);
 
   if (bossLike) {
     // Flank slightly — keep pressure without overlapping the player center.
@@ -79,17 +94,103 @@ export function aiMoveSpeed(e, player, aiCfg) {
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const aggro = Math.abs(dx) < aiCfg.aggroX && Math.abs(dy) < aiCfg.aggroY;
-  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
-    || e.type === 'skeleton_champion');
+  const bossLike = enemyIsBossLike(e);
   let speed = e.speed;
   if (!aggro && !bossLike) speed *= aiCfg.patrolSpeedMul;
   return speed;
 }
 
 /**
- * @param {object} phys - { gravity, maxFall }
+ * Telegraphed slam state machine (pure). Mutates e.slam*.
+ * @param {object} slamCfg - BOSS_SLAM
+ * @returns {{ hit: true, damage: number, knockback: number, dir: number } | null}
  */
-export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys) {
+export function tickEnemySlam(e, dt, player, slamCfg) {
+  if (!enemyUsesTelegraphedSlam(e) || !slamCfg) return null;
+
+  if (!e.slamState) e.slamState = 'idle';
+  if (e.slamCd == null) e.slamCd = 0;
+  if (e.slamT == null) e.slamT = 0;
+
+  if (e.slamCd > 0) e.slamCd = Math.max(0, e.slamCd - dt);
+
+  const dx = player.x - e.x;
+  const dy = (player.y || 0) - e.y;
+  const distX = Math.abs(dx);
+  const inRange = distX <= slamCfg.range && Math.abs(dy) <= (slamCfg.aggroY != null ? slamCfg.aggroY : 55);
+  const dir = dx >= 0 ? 1 : -1;
+
+  if (e.slamState === 'idle') {
+    if (e.slamCd <= 0 && e.hitStun <= 0 && inRange) {
+      e.slamState = 'windup';
+      e.slamT = slamCfg.windup;
+      e.slamHitDone = false;
+      e.facing = dir;
+    }
+    return null;
+  }
+
+  if (e.slamState === 'windup') {
+    e.slamT -= dt;
+    e.facing = dir; // track player during windup
+    if (e.slamT <= 0) {
+      e.slamState = 'slam';
+      e.slamT = slamCfg.active;
+      e.slamHitDone = false;
+    }
+    return null;
+  }
+
+  if (e.slamState === 'slam') {
+    e.slamT -= dt;
+    let result = null;
+    if (!e.slamHitDone) {
+      // Active frames: hit if still in slam range (not necessarily still facing)
+      const stillClose = distX <= slamCfg.range * 1.05 && Math.abs(dy) <= (slamCfg.aggroY != null ? slamCfg.aggroY : 55) + 10;
+      if (stillClose) {
+        e.slamHitDone = true;
+        const baseDmg = e.damage != null ? e.damage : 24;
+        result = {
+          hit: true,
+          damage: Math.floor(baseDmg * (slamCfg.damageMul != null ? slamCfg.damageMul : 1.4)),
+          knockback: slamCfg.knockback != null ? slamCfg.knockback : 280,
+          dir: e.facing || dir,
+        };
+      }
+    }
+    if (e.slamT <= 0) {
+      e.slamState = 'recover';
+      e.slamT = slamCfg.recover;
+    }
+    return result;
+  }
+
+  if (e.slamState === 'recover') {
+    e.slamT -= dt;
+    if (e.slamT <= 0) {
+      e.slamState = 'idle';
+      e.slamCd = slamCfg.cooldown;
+      e.slamT = 0;
+    }
+    return null;
+  }
+
+  e.slamState = 'idle';
+  return null;
+}
+
+/** True while slam windup/active/recover freezes locomotion. */
+export function enemySlamBusy(e) {
+  if (!e || !e.slamState) return false;
+  return e.slamState === 'windup' || e.slamState === 'slam' || e.slamState === 'recover';
+}
+
+/**
+ * @param {object} phys - { gravity, maxFall }
+ * @param {object} [slamCfg] - BOSS_SLAM (optional; enables slam bosses)
+ * @returns {{ hit: true, damage: number, knockback: number, dir: number } | null}
+ */
+export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, slamCfg) {
   const g = phys.gravity;
   const maxFall = phys.maxFall;
 
@@ -100,8 +201,12 @@ export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys) {
   e.vy += g * dt;
   if (e.vy > maxFall) e.vy = maxFall;
 
+  const busy = enemySlamBusy(e);
+
   if (e.hitStun > 0) {
     e.vx *= aiCfg.hitStunDecay;
+  } else if (busy) {
+    e.vx = 0;
   } else {
     const wantDir = aiHorizontalIntent(e, player, platforms, aiCfg);
     e.vx = wantDir * aiMoveSpeed(e, player, aiCfg);
@@ -132,7 +237,14 @@ export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys) {
     e.vy = 0;
     e.onGround = true;
     e.hitStun = 0.3;
+    if (enemyUsesTelegraphedSlam(e)) {
+      e.slamState = 'idle';
+      e.slamT = 0;
+      e.slamCd = 0.4;
+    }
   }
+
+  return tickEnemySlam(e, dt, player, slamCfg);
 }
 
 export function aiPatrolBounds(x, platform, aiCfg) {
