@@ -3,7 +3,7 @@
  */
 
 import {
-  GAME_NAME, GAME_VERSION_LABEL, W, H, ENEMIES,
+  GAME_NAME, GAME_VERSION, GAME_VERSION_LABEL, W, H, ENEMIES,
 } from '../config/index.js';
 import { resizeCanvas } from '../core/math.js';
 import { GameSession } from '../world/GameSession.js';
@@ -418,6 +418,14 @@ function registerSW() {
   if (!(location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return;
   navigator.serviceWorker.register('./sw.js').then(reg => {
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    if (reg.installing) {
+      const w = reg.installing;
+      w.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) {
+          w.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    }
     reg.addEventListener('updatefound', () => {
       const w = reg.installing;
       if (!w) return;
@@ -427,9 +435,33 @@ function registerSW() {
         }
       });
     });
+    const checkForUpdate = () => { reg.update().catch(() => {}); };
+    checkForUpdate();
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkForUpdate();
+    });
+    window.addEventListener('focus', checkForUpdate);
+    setInterval(checkForUpdate, 60 * 1000);
     navigator.serviceWorker.addEventListener('controllerchange', () => safeReloadForUpdate());
   }).catch(err => console.warn('[sw]', err));
+
+  function checkRemoteVersion() {
+    if (session.screen === 'play' || session.screen === 'levelup' || session.screen === 'allocate') return;
+    fetch('js/config/index.js', { cache: 'no-store' })
+      .then(r => r.ok ? r.text() : '')
+      .then(text => {
+        const m = text.match(/GAME_VERSION\s*=\s*['"]([^'"]+)['"]/);
+        if (m && m[1] && m[1] !== GAME_VERSION) safeReloadForUpdate();
+      })
+      .catch(() => {});
+  }
+  checkRemoteVersion();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkRemoteVersion();
+  });
+  setInterval(checkRemoteVersion, 2 * 60 * 1000);
 }
+
 
 addEventListener('resize', () => { ({ ctx } = resizeCanvas(cv, W, H)); });
 

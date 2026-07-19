@@ -1,4 +1,4 @@
-const CACHE = 'ironvale-1.4.100';
+const CACHE = 'ironvale-1.4.101';
 
 const ASSETS = [
   './', './index.html', './css/style.css',
@@ -67,7 +67,7 @@ function sameOrigin(url) {
   try { return new URL(url).origin === self.location.origin; } catch { return false; }
 }
 function networkFirst(request) {
-  return fetch(request).then(res => {
+  return fetch(request, { cache: 'no-store' }).then(res => {
     if (res.ok && sameOrigin(request.url)) {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(request, copy));
