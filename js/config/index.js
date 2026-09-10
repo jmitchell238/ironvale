@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '2.0.100';
+export const GAME_VERSION = '2.0.200';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 export const GAME_TAGLINE = 'Small knight. A greater tomorrow.';
@@ -88,9 +88,9 @@ export const PLAYER = {
 
 export const CAM = {
   focusX: W * 0.34,
-  focusY: H * 0.62,
-  lerp: 6,
-  lerpY: 4.2,
+  focusY: H * 0.64,
+  lerp: 5,
+  lerpY: 3.2,
 };
 
 export const MAX_ENEMIES = 40;

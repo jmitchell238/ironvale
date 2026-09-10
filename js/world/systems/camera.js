@@ -42,7 +42,4 @@ export function updateCamera(session, dt) {
   const camB = getCameraBounds(session);
   session.cameraX = clamp(session.cameraX, camB.minX, camB.maxX);
   session.cameraY = clamp(session.cameraY, camB.minY, camB.maxY);
-  if (p.x - session.cameraX < 40) {
-    session.cameraX = clamp(p.x - 40, camB.minX, camB.maxX);
-  }
 }

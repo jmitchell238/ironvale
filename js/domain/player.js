@@ -69,7 +69,13 @@ export function integratePlayerMovement(dt, input, ctx) {
 
   const ladder = findLadderAt(p, ctx.ladders);
   const grabIy = CLIMB.grabIy != null ? CLIMB.grabIy : 0.35;
-  const wantClimb = !!(ladder && (p.climbing || Math.abs(iy) >= grabIy) && !p.attacking);
+  const pressUp = iy <= -grabIy;
+  const pressDown = iy >= grabIy;
+  const wantClimb = !!(
+    ladder
+    && !p.attacking
+    && (p.climbing || pressUp || (pressDown && p.onGround))
+  );
 
   if (wantClimb) {
     p.climbing = true;
@@ -77,10 +83,10 @@ export function integratePlayerMovement(dt, input, ctx) {
     p.h = p.standH || PLAYER_BODY.h;
     p.onGround = false;
     p.vy = 0;
-    p.vx *= 0.4;
-    const snap = CLIMB.snapSpeed != null ? CLIMB.snapSpeed : 260;
+    p.vx = 0;
+    const snap = CLIMB.snapSpeed != null ? CLIMB.snapSpeed : 180;
     const dx = ladder.x - p.x;
-    if (Math.abs(dx) > 1) p.x += Math.sign(dx) * Math.min(Math.abs(dx), snap * dt);
+    if (Math.abs(dx) > 2) p.x += Math.sign(dx) * Math.min(Math.abs(dx), snap * dt);
     p.y += iy * (CLIMB.speed != null ? CLIMB.speed : 150) * dt;
     // Stay inside the ladder column
     const top = ladder.y;
@@ -175,11 +181,9 @@ export function integratePlayerMovement(dt, input, ctx) {
   if (p.vy > PLAYER_MOVE.maxFall) p.vy = PLAYER_MOVE.maxFall;
 
   p.x += p.vx * dt;
-  const camMin = ctx.cameraX + 24;
-  const worldMin = ctx.worldMinX != null ? ctx.worldMinX : camMin;
-  const minX = Math.max(camMin, worldMin);
-  if (p.x < minX) {
-    p.x = minX;
+  const worldMin = ctx.worldMinX != null ? ctx.worldMinX : 24;
+  if (p.x < worldMin) {
+    p.x = worldMin;
     p.vx = Math.max(0, p.vx);
   }
   if (ctx.worldMaxX != null && p.x > ctx.worldMaxX) {
@@ -194,12 +198,9 @@ export function integratePlayerMovement(dt, input, ctx) {
     for (const pl of ctx.platforms) {
       const left = playerLeft(p);
       const right = playerRight(p);
-      if (right <= pl.x + 2 || left >= pl.x + pl.w - 2) continue;
+      if (right <= pl.x + 4 || left >= pl.x + pl.w - 4) continue;
       const prevFeet = p.y - p.vy * dt;
-      if (
-        (prevFeet <= pl.y + 6 && p.y >= pl.y) ||
-        (p.y >= pl.y - 2 && p.y <= pl.y + Math.max(pl.h + 10, 28) && prevFeet <= pl.y + 20)
-      ) {
+      if (prevFeet <= pl.y + 10 && p.y >= pl.y) {
         p.y = pl.y;
         p.vy = 0;
         p.onGround = true;

@@ -275,7 +275,7 @@ export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, meleeCfg) {
       const pl = platforms[i];
       if (e.x + e.w / 2 <= pl.x + 2 || e.x - e.w / 2 >= pl.x + pl.w - 2) continue;
       const prev = e.y - e.vy * dt;
-      if (prev <= pl.y + 4 && e.y >= pl.y && e.y <= pl.y + pl.h + 10) {
+      if (prev <= pl.y + 10 && e.y >= pl.y) {
         e.y = pl.y;
         e.vy = 0;
         e.onGround = true;

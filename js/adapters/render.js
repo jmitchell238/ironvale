@@ -221,15 +221,7 @@ export function drawPlatforms(ctx, platforms, cam) {
     const y = wy(pl.y, cam);
     if (x + pl.w < -40 || x > W + 40) continue;
     if (y < -90 || y > H + 90) continue;
-    if (pl.style === 'lip') {
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
-      ctx.fillRect(x, y, pl.w, 6);
-      ctx.fillStyle = 'rgba(180, 220, 90, 0.28)';
-      ctx.fillRect(x, y - 2, pl.w, 4);
-      ctx.restore();
-      continue;
-    }
+    if (pl.style === 'hidden' || pl.style === 'lip') continue;
 
     drawPlatformBlock(ctx, { ...pl, y }, x);
 
@@ -696,7 +688,7 @@ export function levelUpHitTest(clientY, rect, choices) {
 }
 
 export function drawIdleDecor(ctx, t) {
-  const cam = { x: (t * 14) % 400, y: 80 };
+  const cam = { x: (t * 14) % 400, y: 40 };
   drawBackground(ctx, cam);
   drawLevelVista(ctx, {
     vista: { key: 'bg/forgegate', x: 0, y: 40, w: 1600, h: 900 },

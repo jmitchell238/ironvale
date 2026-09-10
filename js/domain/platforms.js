@@ -59,10 +59,11 @@ export function ladderAabb(l) {
 export function playerOverlapsLadder(p, ladder) {
   if (!p || !ladder) return false;
   const box = ladderAabb(ladder);
-  const left = p.x - p.w * 0.35;
-  const right = p.x + p.w * 0.35;
+  const pad = p.climbing ? 14 : 6;
+  const left = p.x - p.w * 0.5 - pad;
+  const right = p.x + p.w * 0.5 + pad;
   const top = p.y - p.h;
-  const bot = p.y + 4;
+  const bot = p.y + 10;
   return right > box.x && left < box.x + box.w && bot > box.y && top < box.y + box.h;
 }
 

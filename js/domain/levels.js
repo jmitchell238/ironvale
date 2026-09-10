@@ -41,13 +41,22 @@ import { buildPlatformsFromDefs, makeLadder } from './platforms.js';
  */
 
 /**
- * Painted Forgegate vista lives in world space. Percent helpers map the
- * 16:9 painting onto collision (x/y are 0–1 across the image).
+ * Painted Forgegate vista. Collision is authored in the source image's
+ * pixels (1280×720), then scaled into world space. Do not draw these
+ * platforms — the painting is the scenery.
  */
-const FG = { x: 0, y: 40, w: 1600, h: 900 };
-const fgx = (p) => FG.x + FG.w * p;
-const fgy = (p) => FG.y + FG.h * p;
-const fgw = (p) => FG.w * p;
+const IMG_W = 1280;
+const IMG_H = 720;
+const FG = { x: 0, y: 0, w: 1600, h: 900 };
+const SX = FG.w / IMG_W;
+const SY = FG.h / IMG_H;
+const px = (x) => FG.x + x * SX;
+const py = (y) => FG.y + y * SY;
+const pw = (w) => w * SX;
+
+function hiddenPlat(x, y, w) {
+  return { x: px(x), y: py(y), w: pw(w), style: 'hidden', h: 22 };
+}
 
 const FORGEGATE_FIELDS = {
   id: 'forgegate-fields',
@@ -56,74 +65,63 @@ const FORGEGATE_FIELDS = {
   order: 1,
   stub: false,
   vista: { key: 'bg/forgegate', x: FG.x, y: FG.y, w: FG.w, h: FG.h },
-  bounds: { minX: 0, maxX: FG.w, minY: 0, maxY: FG.y + FG.h + 160 },
-  spawn: { x: fgx(0.18), y: fgy(0.50) },
+  bounds: { minX: 0, maxX: FG.w, minY: 0, maxY: FG.h + 120 },
+  spawn: { x: px(280), y: py(392) },
   platforms: [
-    // Left intro terrace (sign / banner)
-    { x: fgx(0.00), y: fgy(0.50), w: fgw(0.30), style: 'lip', h: 18 },
-    // Wooden landing under the left ladder
-    { x: fgx(0.05), y: fgy(0.72), w: fgw(0.16), style: 'lip', h: 14 },
-    // Mid goblin ledge
-    { x: fgx(0.33), y: fgy(0.445), w: fgw(0.22), style: 'lip', h: 16 },
-    // Rope bridge
-    { x: fgx(0.54), y: fgy(0.455), w: fgw(0.17), style: 'lip', h: 12 },
-    // Lower skeleton walk
-    { x: fgx(0.50), y: fgy(0.655), w: fgw(0.28), style: 'lip', h: 16 },
-    // Gate terrace
-    { x: fgx(0.72), y: fgy(0.62), w: fgw(0.28), style: 'lip', h: 18 },
-    // High right coins perch
-    { x: fgx(0.80), y: fgy(0.30), w: fgw(0.12), style: 'lip', h: 14 },
-    // Safety floor (fall catch under the gap)
-    { x: fgx(0.20), y: fgy(0.88), w: fgw(0.38), style: 'lip', h: 20 },
+    hiddenPlat(0, 392, 378),     // left terrace
+    hiddenPlat(72, 516, 215),    // wooden deck under left ladder
+    hiddenPlat(418, 362, 275),   // mid goblin ledge
+    hiddenPlat(675, 368, 295),   // rope bridge
+    hiddenPlat(655, 550, 305),   // lower skeleton walk
+    hiddenPlat(948, 546, 332),   // gate terrace
+    hiddenPlat(140, 668, 600),   // fall catch
   ],
   ladders: [
-    { x: fgx(0.155), y: fgy(0.50), h: fgy(0.72) - fgy(0.50) },
-    { x: fgx(0.495), y: fgy(0.445), h: fgy(0.655) - fgy(0.445) },
-    { x: fgx(0.695), y: fgy(0.62), h: fgy(0.78) - fgy(0.62) },
+    { x: px(194), y: py(392), h: py(516) - py(392), w: 36 },
+    { x: px(778), y: py(362), h: py(550) - py(362), w: 36 },
+    { x: px(990), y: py(546), h: py(678) - py(546), w: 36 },
   ],
   props: [
-    { type: 'crate', x: fgx(0.40), y: fgy(0.445) },
-    { type: 'barrel', x: fgx(0.43), y: fgy(0.445) },
+    { type: 'crate', x: px(500), y: py(362) },
+    { type: 'barrel', x: px(535), y: py(362) },
   ],
   coins: [
-    { x: fgx(0.30), y: fgy(0.46) },
-    { x: fgx(0.325), y: fgy(0.46) },
-    { x: fgx(0.35), y: fgy(0.46) },
-    { x: fgx(0.84), y: fgy(0.26) },
-    { x: fgx(0.87), y: fgy(0.26) },
-    { x: fgx(0.73), y: fgy(0.62) - 28 },
-    { x: fgx(0.76), y: fgy(0.62) - 28 },
+    { x: px(390), y: py(350) },
+    { x: px(420), y: py(350) },
+    { x: px(450), y: py(350) },
+    { x: px(1088), y: py(520) },
+    { x: px(1124), y: py(520) },
+    { x: px(1020), y: py(250) },
+    { x: px(1055), y: py(250) },
   ],
   encounters: [
     {
       id: 'fg-goblin',
-      triggerX: fgx(0.28),
-      enemies: [{ type: 'goblin', x: fgx(0.46), y: fgy(0.445) }],
+      triggerX: px(360),
+      enemies: [{ type: 'goblin', x: px(560), y: py(362) }],
     },
     {
       id: 'fg-bats',
-      triggerX: fgx(0.42),
+      triggerX: px(500),
       enemies: [
-        { type: 'bat', x: fgx(0.58), y: fgy(0.38) },
-        { type: 'bat', x: fgx(0.50), y: fgy(0.58) },
+        { type: 'bat', x: px(740), y: py(280) },
+        { type: 'bat', x: px(620), y: py(470) },
       ],
     },
     {
       id: 'fg-skeleton',
-      triggerX: fgx(0.52),
-      enemies: [{ type: 'shield_skeleton', x: fgx(0.62), y: fgy(0.655) }],
+      triggerX: px(640),
+      enemies: [{ type: 'shield_skeleton', x: px(820), y: py(550) }],
     },
     {
       id: 'fg-gate-guard',
-      triggerX: fgx(0.70),
-      enemies: [
-        { type: 'goblin', x: fgx(0.78), y: fgy(0.62) },
-      ],
+      triggerX: px(880),
+      enemies: [{ type: 'goblin', x: px(1020), y: py(546) }],
     },
   ],
-  checkpoints: [{ id: 'fg-mid', x: fgx(0.54), y: fgy(0.455) }],
-  gateX: fgx(0.82),
-  gate: { x: fgx(0.80), y: fgy(0.48), w: 70, h: fgy(0.62) - fgy(0.48) },
+  checkpoints: [{ id: 'fg-mid', x: px(780), y: py(368) }],
+  gateX: px(1088),
+  gate: { x: px(1075), y: py(400), w: pw(120), h: py(546) - py(400) },
   clearBonus: 100,
 };
 
