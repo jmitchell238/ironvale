@@ -1,4 +1,4 @@
-const CACHE = 'ironvale-2.0.000';
+const CACHE = 'ironvale-2.0.100';
 
 const ASSETS = [
   './', './index.html', './css/style.css',
@@ -35,6 +35,7 @@ const ASSETS = [
   './assets/sprites/enemies/bat.png',
   './assets/sprites/enemies/skeleton.png',
   './assets/sprites/bg/sky.png',
+  './assets/sprites/bg/forgegate.png',
   './assets/sprites/tiles/ground.png',
   './assets/sprites/fx/heart.png',
 ];

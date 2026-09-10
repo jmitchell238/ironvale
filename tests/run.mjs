@@ -715,6 +715,7 @@ section('New Game+ + juice hitstop');
   const base = config.ENEMIES.goblin.hp;
   assert(e.hp > base, 'ng+ tougher goblin');
   s.player.x = e.x - 20;
+  s.player.y = e.y;
   s.player.facing = 1;
   s.doAttack();
   assert(s.hitstop > 0, 'hitstop applied');

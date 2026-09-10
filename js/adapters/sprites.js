@@ -2,7 +2,7 @@
 
 export const SPRITE_MANIFEST = {
   'player/idle':   { src: 'assets/sprites/player/idle.png',   fw: 80, fh: 96, frames: 1, fps: 5 },
-  'player/run':    { src: 'assets/sprites/player/run.png',    fw: 80, fh: 96, frames: 1, fps: 10 },
+  'player/run':    { src: 'assets/sprites/player/run.png',    fw: 80, fh: 96, frames: 2, fps: 10 },
   'player/jump':   { src: 'assets/sprites/player/jump.png',   fw: 80, fh: 96, frames: 1, fps: 8 },
   'player/djump':  { src: 'assets/sprites/player/djump.png',  fw: 80, fh: 96, frames: 1, fps: 10 },
   'player/duck':   { src: 'assets/sprites/player/duck.png',   fw: 80, fh: 96, frames: 1, fps: 6 },
@@ -17,6 +17,7 @@ export const SPRITE_MANIFEST = {
   'enemy/warden':    { src: 'assets/sprites/enemies/warden.png',    fw: 96, fh: 112, frames: 1, fps: 4 },
 
   'bg/sky':        { src: 'assets/sprites/bg/sky.png' },
+  'bg/forgegate':  { src: 'assets/sprites/bg/forgegate.png' },
   'bg/mountains':  { src: 'assets/sprites/bg/mountains.png' },
   'bg/castle':     { src: 'assets/sprites/bg/castle.png' },
   'bg/forest':     { src: 'assets/sprites/bg/forest.png' },

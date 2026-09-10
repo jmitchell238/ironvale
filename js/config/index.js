@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '2.0.000';
+export const GAME_VERSION = '2.0.100';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 export const GAME_TAGLINE = 'Small knight. A greater tomorrow.';
@@ -76,7 +76,7 @@ export const PLAYER_SWORD = {
   airAttackHeight: 48,
 };
 
-export const PLAYER_DRAW = { drawScale: 1.15 };
+export const PLAYER_DRAW = { drawScale: 1.28 };
 
 /** Convenience merge for systems that need several axes. */
 export const PLAYER = {

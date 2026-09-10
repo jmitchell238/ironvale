@@ -118,6 +118,20 @@ export function drawBackground(ctx, cam) {
   drawParallaxLayer(ctx, 'bg/bridge', cam, 0.42, 0.12, H * 0.55, H * 0.28);
 }
 
+/** World-space painted backdrop (Forgegate Fields). */
+export function drawLevelVista(ctx, level, cam) {
+  const v = level && level.vista;
+  if (!v) return;
+  const entry = getSprite(v.key || 'bg/forgegate');
+  if (!entry || !entry.ready) return;
+  const x = wx(v.x, cam);
+  const y = wy(v.y, cam);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(entry.img, x, y, v.w, v.h);
+  ctx.restore();
+}
+
 /**
  * Draw a single platform with depth: top grass/stone, dirt body, shadow, edge lip.
  */
@@ -207,6 +221,16 @@ export function drawPlatforms(ctx, platforms, cam) {
     const y = wy(pl.y, cam);
     if (x + pl.w < -40 || x > W + 40) continue;
     if (y < -90 || y > H + 90) continue;
+    if (pl.style === 'lip') {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(x, y, pl.w, 6);
+      ctx.fillStyle = 'rgba(180, 220, 90, 0.28)';
+      ctx.fillRect(x, y - 2, pl.w, 4);
+      ctx.restore();
+      continue;
+    }
+
     drawPlatformBlock(ctx, { ...pl, y }, x);
 
     const key = pl.style === 'bridge' ? 'tile/platform' : (pl.ground ? 'tile/ground' : 'tile/platform');
@@ -672,8 +696,11 @@ export function levelUpHitTest(clientY, rect, choices) {
 }
 
 export function drawIdleDecor(ctx, t) {
-  const cam = { x: t * 18, y: GROUND_Y - H * 0.62 };
+  const cam = { x: (t * 14) % 400, y: 80 };
   drawBackground(ctx, cam);
+  drawLevelVista(ctx, {
+    vista: { key: 'bg/forgegate', x: 0, y: 40, w: 1600, h: 900 },
+  }, cam);
 }
 
 export function drawLoading(ctx) {
@@ -787,8 +814,11 @@ export function drawSession(ctx, session, t, stick, bestScore) {
     drawIdleDecor(ctx, t);
   } else if (inWorld && session.player) {
     drawBackground(ctx, cam);
+    drawLevelVista(ctx, session.level, cam);
     drawPlatforms(ctx, session.platforms, cam);
-    drawLadders(ctx, session.ladders, cam);
+    if (!session.level?.vista) {
+      drawLadders(ctx, session.ladders, cam);
+    }
     drawProps(ctx, session.level?.props, cam);
     if (session.levelPhase === 'explore') {
       drawCheckpoints(
@@ -798,12 +828,14 @@ export function drawSession(ctx, session, t, stick, bestScore) {
         session.reachedCheckpoints,
         session.activeCheckpoint?.id || null,
       );
-      drawGate(
-        ctx,
-        session.level?.gate || session.getGateX?.() || session.level?.gateX,
-        cam,
-        session.isGateOpen?.() ?? false,
-      );
+      if (!session.level?.vista) {
+        drawGate(
+          ctx,
+          session.level?.gate || session.getGateX?.() || session.level?.gateX,
+          cam,
+          session.isGateOpen?.() ?? false,
+        );
+      }
     }
     if (session.levelPhase === 'boss') {
       drawArenaBounds(ctx, session.arena, cam);
