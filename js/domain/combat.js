@@ -88,6 +88,10 @@ export function resolveMeleeHits(player, enemies, stats, swordCfg) {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     if (!enemyOverlapsBox(e, box)) continue;
+    if (enemyBlocksFront(e, player)) {
+      hits.push({ enemy: e, index: i, killed: false, box, blocked: true });
+      continue;
+    }
     e.hp -= damage;
     e.flash = 0.14;
     e.hitStun = 0.18;
@@ -98,6 +102,19 @@ export function resolveMeleeHits(player, enemies, stats, swordCfg) {
 
   if (hits.length) player.attackHitDone = true;
   return { hitAny: hits.length > 0, hits, box };
+}
+
+/**
+ * Shield skeletons block sword hits from the facing side while idle/windup.
+ */
+export function enemyBlocksFront(enemy, attacker) {
+  if (!enemy || !attacker) return false;
+  const blocks = !!(enemy.blockFront || enemy.blocksFront);
+  if (!blocks) return false;
+  const state = enemy.slamState || 'idle';
+  if (state === 'slam' || state === 'recover') return false;
+  const facing = enemy.facing || -1;
+  return Math.sign(attacker.x - enemy.x) === facing;
 }
 
 export function hasMeleePriority(player, stats, swordCfg) {

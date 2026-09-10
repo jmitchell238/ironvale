@@ -1,6 +1,8 @@
 # Ironvale
 
-Medieval **2D platformer** — run, jump, and sword-slash through discrete stages of Ironvale. Clear encounters, open the end gate, defeat the stage boss, and advance the campaign.
+**Small knight. A greater tomorrow.**
+
+A 2D action-platformer about an apprentice knight who explores, climbs, fights, and opens the path to a brighter vale.
 
 **Play:** https://jmitchell238.github.io/ironvale/
 
@@ -9,22 +11,21 @@ Medieval **2D platformer** — run, jump, and sword-slash through discrete stage
 | Input | Action |
 |-------|--------|
 | Left stick / A D / ← → | Run |
-| JUMP / Space / W / ↑ | Jump (press again in air = double jump) |
+| W / ↑ on a ladder | Climb |
+| JUMP / Space | Jump (press again in air = double jump) |
 | S / ↓ | Duck |
 | ATK / J / F / Shift | Sword slash |
-| 1–6 | Allocate attributes (between stages) |
+| 1–6 | Train attributes at the forge (between stages) |
 | Esc | Menu |
 
-## Features
+## Campaign
 
-- Knight character art (GameArt2D free sprite)
-- Gravity, coyote time, variable jump
-- **10** campaign stages with authored layouts and end bosses
-- Mid-stage **checkpoints** (flag → continue after death)
-- Melee combat with hitstop juice; coins/XP; persistent RPG **between stages**
-- End gate → boss arena → allocate points → stage clear
-- **New Game+** after campaign clear (harder foes, keep hero stats)
-- Installable PWA
+1. **Forgegate Fields** — teaching stage. Ruins, ladders, goblins, bats, shield skeletons, locked gate.
+2. **Forest Ramparts** — nature reclaims the walls.
+3. **Forge Ruins** — old machines, new paths.
+4. **Iron Caverns** — campaign boss: **The Iron Warden**.
+
+Clear encounters to unlock the end gate. Touch a flag for checkpoints. Level-ups bank forge points mid-stage; spend them between biomes.
 
 ## Architecture
 
@@ -34,20 +35,18 @@ Layered ES modules — see **[ARCHITECTURE.md](./ARCHITECTURE.md)**.
 app → adapters → world/GameSession + systems → domain → config/core
 ```
 
-Sword length, body size, and draw scale are separate config axes so changing one does not break the others.
+Sword length, body size, and draw scale are separate config axes.
 
 ## Tests
 
 ```bash
 npm test
-# or: node tests/run.mjs
 ```
 
 ## Local
 
 ```bash
 npm start
-# or: python3 -m http.server 8080
 ```
 
-Requires HTTP (ES modules).
+Requires HTTP (ES modules). Landscape 960×540 canvas, letterboxed.

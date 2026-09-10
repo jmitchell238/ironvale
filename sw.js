@@ -1,4 +1,4 @@
-const CACHE = 'ironvale-1.4.101';
+const CACHE = 'ironvale-2.0.000';
 
 const ASSETS = [
   './', './index.html', './css/style.css',
@@ -27,22 +27,15 @@ const ASSETS = [
   './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
   './apple-touch-icon.png', './art/cover.jpg',
   './assets/sprites/player/idle.png',
-  './assets/sprites/player/walk.png',
   './assets/sprites/player/run.png',
   './assets/sprites/player/jump.png',
   './assets/sprites/player/attack.png',
-  './assets/sprites/player/jump_attack.png',
-  './assets/sprites/player/dead.png',
   './assets/sprites/player/logo.png',
-  './assets/sprites/enemies/slime.png',
-  './assets/sprites/enemies/bandit.png',
+  './assets/sprites/enemies/goblin.png',
+  './assets/sprites/enemies/bat.png',
   './assets/sprites/enemies/skeleton.png',
-  './assets/sprites/enemies/ogre.png',
-  './assets/sprites/bg/hills.png',
+  './assets/sprites/bg/sky.png',
   './assets/sprites/tiles/ground.png',
-  './assets/sprites/tiles/platform.png',
-  './assets/sprites/fx/coin.png',
-  './assets/sprites/fx/slash.png',
   './assets/sprites/fx/heart.png',
 ];
 

@@ -1,13 +1,13 @@
 {
   "name": "Ironvale",
   "short_name": "Ironvale",
-  "description": "Medieval 2D platformer — run, jump, and slash your way through Ironvale.",
+  "description": "Ironvale — small knight, a greater tomorrow. A 2D action-platformer.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#1a1420",
-  "theme_color": "#1a1420",
+  "orientation": "landscape",
+  "background_color": "#1a2430",
+  "theme_color": "#1a2430",
   "categories": ["games", "entertainment"],
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

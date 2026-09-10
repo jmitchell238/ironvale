@@ -4,7 +4,7 @@
 
 import { CAM, GROUND_Y } from '../../config/index.js';
 import {
-  getLevelById, listLevels, buildLevelPlatforms, nextLevel,
+  getLevelById, listLevels, buildLevelPlatforms, buildLevelLadders, nextLevel,
   playerWorldLimits, listCheckpoints,
 } from '../../domain/levels.js';
 import { isLevelUnlocked } from '../../domain/rpg.js';
@@ -18,13 +18,32 @@ import { spawnEnemy } from './enemy.js';
  */
 export function getPlayerBounds(session) {
   if (session.arena) {
+    const lim = session.level ? playerWorldLimits(session.level) : { minY: 0, maxY: GROUND_Y + 200 };
     return {
       minX: session.arena.minX + 20,
       maxX: session.arena.maxX - 20,
+      minY: lim.minY,
+      maxY: lim.maxY,
     };
   }
   if (session.level) return playerWorldLimits(session.level);
-  return { minX: 24, maxX: 1e9 };
+  return { minX: 24, maxX: 1e9, minY: 0, maxY: GROUND_Y + 200 };
+}
+
+/** Locked-gate AABB, or null when the gate is open / missing. */
+export function getGateBlocker(session) {
+  if (!session.level || session.levelPhase !== 'explore') return null;
+  if (isGateOpen(session)) return null;
+  const g = session.level.gate;
+  if (g) return { x: g.x, y: g.y, w: g.w || 64, h: g.h || 120 };
+  if (session.level.gateX == null) return null;
+  const gy = session.level.spawn?.y ?? GROUND_Y;
+  return { x: session.level.gateX, y: gy - 120, w: 48, h: 120 };
+}
+
+export function refreshBlockers(session) {
+  const b = getGateBlocker(session);
+  session.blockers = b ? [b] : [];
 }
 
 /** @param {import('../GameSession.js').GameSession} session */
@@ -68,7 +87,7 @@ export function activateCheckpoint(session, cp) {
   session.activeCheckpoint = {
     id: cp.id,
     x: cp.x,
-    y: cp.y ?? GROUND_Y,
+    y: cp.y ?? session.player?.y ?? GROUND_Y,
     firedIds: [...session.firedEncounters],
   };
   // Soft juice — gold burst at flag
@@ -81,6 +100,15 @@ export function activateCheckpoint(session, cp) {
 /**
  * @param {import('../GameSession.js').GameSession} session
  */
+function seedAuthoredCoins(session, def) {
+  if (!def?.coins?.length) return;
+  for (const c of def.coins) {
+    session.coins.push({
+      x: c.x, y: c.y, vx: 0, vy: 0, r: 8, xp: 1, life: 999, authored: true,
+    });
+  }
+}
+
 export function enterBossArena(session) {
   if (!session.level || session.bossSpawned) return;
   const b = session.level.boss;
@@ -104,6 +132,7 @@ export function enterBossArena(session) {
     boss.isBoss = true;
   }
   session.shake = Math.max(session.shake, 2.5);
+  session.blockers = [];
   if (typeof session.burst === 'function') {
     session.burst(b.spawnX, (b.spawnY ?? GROUND_Y) - 30, '#e74c3c', 22, 140);
   }
@@ -124,8 +153,10 @@ export function updateLevelProgress(session) {
     for (const cp of listCheckpoints(session.level)) {
       if (px >= cp.x) activateCheckpoint(session, cp);
     }
+    refreshBlockers(session);
     if (isGateOpen(session) && px >= session.level.gateX) {
-      enterBossArena(session);
+      if (session.level.boss) enterBossArena(session);
+      else session.clearLevel();
     }
   }
 }
@@ -158,15 +189,21 @@ export function loadLevelIntoSession(session, levelId, opts = {}) {
   session.player.y = def.spawn.y ?? GROUND_Y;
   session._applyMetaToRun();
   session.platforms = buildLevelPlatforms(def);
-  session.cameraX = Math.max(0, def.spawn.x - CAM.focusX);
+  session.ladders = buildLevelLadders(def);
+  session.cameraX = Math.max(def.bounds.minX, def.spawn.x - CAM.focusX);
+  session.cameraY = Math.max(def.bounds.minY || 0, def.spawn.y - (CAM.focusY || 0));
   session.levelPhase = 'explore';
   session.screen = 'play';
+  session.coinsCollected = 0;
+  seedAuthoredCoins(session, def);
+  refreshBlockers(session);
 
   if (resumeOk) {
     for (const id of resume.firedIds) session.firedEncounters.add(id);
     session.player.x = resume.x;
     session.player.y = resume.y ?? GROUND_Y;
-    session.cameraX = Math.max(0, session.player.x - CAM.focusX);
+    session.cameraX = Math.max(def.bounds.minX, session.player.x - CAM.focusX);
+    session.cameraY = Math.max(def.bounds.minY || 0, session.player.y - (CAM.focusY || 0));
     // Restore active checkpoint so further continues work
     session.activeCheckpoint = {
       id: resume.id,

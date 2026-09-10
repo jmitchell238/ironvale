@@ -2,7 +2,7 @@
  * Player system — movement integration, hurt, invuln tick.
  */
 
-import { PLAYER_MOVE, PLAYER_SWORD } from '../../config/index.js';
+import { PLAYER_MOVE, PLAYER_SWORD, HEART } from '../../config/index.js';
 import { hasMeleePriority } from '../../domain/combat.js';
 import { integratePlayerMovement, playerCx, playerCy } from '../../domain/player.js';
 
@@ -15,6 +15,7 @@ import { integratePlayerMovement, playerCx, playerCy } from '../../domain/player
  */
 export function updatePlayer(session, dt, input) {
   const bounds = session.getPlayerBounds();
+  const cp = session.activeCheckpoint;
   const move = integratePlayerMovement(dt, {
     ix: input.x,
     iy: input.y,
@@ -23,14 +24,19 @@ export function updatePlayer(session, dt, input) {
     player: session.player,
     stats: session.stats,
     platforms: session.platforms,
+    ladders: session.ladders,
+    blockers: session.blockers,
     cameraX: session.cameraX,
     jumpBuffered: session.jumpBuffered,
     jumpHeld: session.jumpHeld,
     swordCfg: PLAYER_SWORD,
     worldMinX: bounds.minX,
     worldMaxX: bounds.maxX,
+    worldMaxY: bounds.maxY,
+    respawnX: cp ? cp.x : session.level?.spawn?.x,
+    respawnY: cp ? cp.y : session.level?.spawn?.y,
     onJump: () => session.audio.jump(),
-    onFellOff: () => hurtPlayer(session, 25),
+    onFellOff: () => hurtPlayer(session, HEART),
   });
   session.jumpBuffered = move.jumpBuffered;
   if (move.stillSwinging && !session.player.attackHitDone) {

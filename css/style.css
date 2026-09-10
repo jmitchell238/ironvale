@@ -1,11 +1,12 @@
 :root {
-  --bg: #1a1420;
-  --card: rgba(36, 26, 18, 0.92);
-  --line: rgba(201, 162, 39, 0.25);
+  --bg: #152028;
+  --card: rgba(28, 24, 18, 0.9);
+  --line: rgba(201, 162, 39, 0.28);
   --text: #f5e6c8;
   --muted: #a89070;
   --gold: #c9a227;
   --red: #c0392b;
+  --vale: #3a6aa0;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -63,7 +64,7 @@ html, body {
 .play-chrome { z-index: 6; }
 
 .menu-card {
-  width: min(340px, 100%);
+  width: min(480px, 100%);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -74,10 +75,10 @@ html, body {
 
 .logo-wrap { display: flex; justify-content: center; margin-bottom: 4px; }
 .logo-icon {
-  width: 96px; height: 108px;
-  image-rendering: pixelated; image-rendering: crisp-edges;
+  width: 96px; height: 96px;
+  image-rendering: auto;
   object-fit: contain;
-  border-radius: 14px;
+  border-radius: 50%;
   background: linear-gradient(180deg, #2a2038, #1a1420);
   box-shadow: 0 0 0 1px rgba(201, 162, 39, 0.4), 0 8px 24px rgba(201, 162, 39, 0.15);
 }

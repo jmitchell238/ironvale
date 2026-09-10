@@ -5,9 +5,9 @@
 import { W, H } from '../config/index.js';
 import { clamp, dist } from '../core/math.js';
 
-export const STICK_R = 40;
-export const JUMP_BTN = { x: W - 58, y: H - 52, r: 30 };
-export const ATK_BTN = { x: W - 58, y: H - 118, r: 28 };
+export const STICK_R = 42;
+export const JUMP_BTN = { x: W - 62, y: H - 50, r: 32 };
+export const ATK_BTN = { x: W - 140, y: H - 50, r: 28 };
 
 export function createInput(stageEl, canvasEl, hooks) {
   const stick = {

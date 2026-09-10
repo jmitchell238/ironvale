@@ -30,7 +30,7 @@ let ctx = null;
 let last = performance.now();
 let assetsLoaded = false;
 /** Last level id for retry. */
-let lastLevelId = listLevels()[0]?.id || 'outer-vale';
+let lastLevelId = listLevels()[0]?.id || 'forgegate-fields';
 
 function setScreen(name) {
   document.querySelectorAll('.screen').forEach(el => {

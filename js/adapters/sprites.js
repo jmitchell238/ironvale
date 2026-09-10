@@ -1,25 +1,44 @@
 /** Adapter: sprite sheet loading + draw. */
 
 export const SPRITE_MANIFEST = {
-  'player/idle':   { src: 'assets/sprites/player/idle.png',   fw: 64, fh: 72, frames: 10, fps: 5 },
-  'player/walk':   { src: 'assets/sprites/player/walk.png',   fw: 64, fh: 72, frames: 10, fps: 6 },
-  'player/run':    { src: 'assets/sprites/player/run.png',    fw: 64, fh: 72, frames: 10, fps: 7 },
-  'player/jump':   { src: 'assets/sprites/player/jump.png',   fw: 64, fh: 72, frames: 10, fps: 6 },
-  'player/attack':      { src: 'assets/sprites/player/attack.png',      fw: 64, fh: 72, frames: 10, fps: 14 },
-  'player/jump_attack': { src: 'assets/sprites/player/jump_attack.png', fw: 64, fh: 72, frames: 10, fps: 14 },
-  'player/dead':        { src: 'assets/sprites/player/dead.png',        fw: 64, fh: 72, frames: 10, fps: 6 },
+  'player/idle':   { src: 'assets/sprites/player/idle.png',   fw: 80, fh: 96, frames: 1, fps: 5 },
+  'player/run':    { src: 'assets/sprites/player/run.png',    fw: 80, fh: 96, frames: 1, fps: 10 },
+  'player/jump':   { src: 'assets/sprites/player/jump.png',   fw: 80, fh: 96, frames: 1, fps: 8 },
+  'player/djump':  { src: 'assets/sprites/player/djump.png',  fw: 80, fh: 96, frames: 1, fps: 10 },
+  'player/duck':   { src: 'assets/sprites/player/duck.png',   fw: 80, fh: 96, frames: 1, fps: 6 },
+  'player/attack': { src: 'assets/sprites/player/attack.png', fw: 96, fh: 96, frames: 1, fps: 14 },
+  'player/hurt':   { src: 'assets/sprites/player/hurt.png',   fw: 80, fh: 96, frames: 1, fps: 8 },
+  'player/portrait': { src: 'assets/sprites/player/portrait.png' },
+  'player/logo':     { src: 'assets/sprites/player/logo.png' },
 
-  'enemy/slime':    { src: 'assets/sprites/enemies/slime.png',    fw: 32, fh: 32, frames: 4, fps: 5 },
-  'enemy/bandit':   { src: 'assets/sprites/enemies/bandit.png',   fw: 40, fh: 48, frames: 4, fps: 5 },
-  'enemy/skeleton': { src: 'assets/sprites/enemies/skeleton.png', fw: 40, fh: 48, frames: 4, fps: 5 },
-  'enemy/ogre':     { src: 'assets/sprites/enemies/ogre.png',     fw: 56, fh: 56, frames: 4, fps: 4 },
+  'enemy/goblin':    { src: 'assets/sprites/enemies/goblin.png',    fw: 64, fh: 72, frames: 1, fps: 6 },
+  'enemy/bat':       { src: 'assets/sprites/enemies/bat.png',       fw: 64, fh: 48, frames: 1, fps: 8 },
+  'enemy/skeleton':  { src: 'assets/sprites/enemies/skeleton.png',  fw: 64, fh: 72, frames: 1, fps: 5 },
+  'enemy/warden':    { src: 'assets/sprites/enemies/warden.png',    fw: 96, fh: 112, frames: 1, fps: 4 },
 
-  'bg/hills':      { src: 'assets/sprites/bg/hills.png' },
+  'bg/sky':        { src: 'assets/sprites/bg/sky.png' },
+  'bg/mountains':  { src: 'assets/sprites/bg/mountains.png' },
+  'bg/castle':     { src: 'assets/sprites/bg/castle.png' },
+  'bg/forest':     { src: 'assets/sprites/bg/forest.png' },
+  'bg/bridge':     { src: 'assets/sprites/bg/bridge.png' },
+
   'tile/ground':   { src: 'assets/sprites/tiles/ground.png' },
   'tile/platform': { src: 'assets/sprites/tiles/platform.png' },
-  'fx/coin':       { src: 'assets/sprites/fx/coin.png' },
+  'tile/ladder':   { src: 'assets/sprites/tiles/ladder.png' },
+
+  'prop/coin':     { src: 'assets/sprites/props/coin.png' },
+  'prop/flag':     { src: 'assets/sprites/props/flag.png' },
+  'prop/gate':     { src: 'assets/sprites/props/gate.png' },
+  'prop/torch':    { src: 'assets/sprites/props/torch.png' },
+  'prop/crate':    { src: 'assets/sprites/props/crate.png' },
+  'prop/barrel':   { src: 'assets/sprites/props/barrel.png' },
+  'prop/banner':   { src: 'assets/sprites/props/banner.png' },
+  'prop/sign':     { src: 'assets/sprites/props/sign.png' },
+  'prop/chain':    { src: 'assets/sprites/props/chain.png' },
+
   'fx/slash':      { src: 'assets/sprites/fx/slash.png' },
   'fx/heart':      { src: 'assets/sprites/fx/heart.png' },
+  'ui/logo':       { src: 'assets/sprites/ui/logo.png' },
 };
 
 const spriteCache = Object.create(null);
@@ -64,22 +83,24 @@ export function drawSprite(ctx, key, frame, x, y, opts = {}) {
   const meta = entry.meta;
   const fw = meta.fw || entry.img.width;
   const fh = meta.fh || entry.img.height;
-  const scale = opts.scale != null ? opts.scale : 1.35;
+  const scale = opts.scale != null ? opts.scale : 1.15;
   const flip = !!opts.flip;
-  const cam = opts.cam || 0;
-  const sx = x - cam;
+  const camX = opts.camX != null ? opts.camX : (opts.cam || 0);
+  const camY = opts.camY || 0;
+  const sx = x - camX;
+  const sy = y - camY;
   const dw = fw * scale;
   const dh = fh * scale;
   const col = frame % (meta.frames || 1);
   ctx.save();
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
   if (flip) {
-    ctx.translate(sx, y);
+    ctx.translate(sx, sy);
     ctx.scale(-1, 1);
     ctx.drawImage(entry.img, col * fw, 0, fw, fh, -dw / 2, -dh, dw, dh);
   } else {
-    ctx.drawImage(entry.img, col * fw, 0, fw, fh, sx - dw / 2, y - dh, dw, dh);
+    ctx.drawImage(entry.img, col * fw, 0, fw, fh, sx - dw / 2, sy - dh, dw, dh);
   }
   ctx.restore();
   return true;

@@ -10,13 +10,16 @@ export function enemyIsBossLike(e) {
   if (!e) return false;
   if (e.isBoss) return true;
   const t = e.type;
-  return t === 'boss' || t === 'bandit_captain'
-    || t === 'skeleton_champion' || t === 'ogre_warchief';
+  return t === 'iron_warden' || t === 'boss';
+}
+
+export function enemyFlies(e) {
+  return !!(e && (e.fly || e.flying));
 }
 
 /**
  * Uses windup → active hit → recover instead of contact-only damage.
- * Bandit / skeleton / ogre / bosses; slimes stay contact-only.
+ * Goblin / shield skeleton / Iron Warden; bats stay contact-only.
  */
 export function enemyUsesTelegraphedAttack(e) {
   if (!e) return false;
@@ -223,6 +226,30 @@ export function aiUpdateEnemy(e, dt, player, platforms, aiCfg, phys, meleeCfg) {
   if (e.hitStun > 0) e.hitStun = Math.max(0, e.hitStun - dt);
   if (e.spawnGrace != null && e.spawnGrace > 0) {
     e.spawnGrace = Math.max(0, e.spawnGrace - dt);
+  }
+
+  const flying = enemyFlies(e);
+
+  if (flying) {
+    e.onGround = false;
+    const homeY = e.homeY != null ? e.homeY : e.y;
+    const bob = Math.sin(e.phase * 2.4) * 18;
+    const targetY = homeY + bob;
+    if (player && Math.abs(player.x - e.x) < (aiCfg.aggroX || 200)) {
+      const swoop = Math.sin(e.phase * 1.6) * 26;
+      e.y += ((targetY + swoop) - e.y) * Math.min(1, dt * 3);
+      const want = Math.sign(player.x - e.x) || e.facing || -1;
+      e.facing = want;
+      e.vx = want * e.speed * 0.7;
+    } else {
+      e.y += (targetY - e.y) * Math.min(1, dt * 2);
+      if (e.x <= e.patrolMin) e.facing = 1;
+      else if (e.x >= e.patrolMax) e.facing = -1;
+      e.vx = (e.facing || -1) * e.speed * (aiCfg.patrolSpeedMul || 0.55);
+    }
+    e.x += e.vx * dt;
+    e.vy = 0;
+    return tickEnemySlam(e, dt, player, meleeCfg || getEnemyMeleeCfg(e));
   }
 
   e.vy += g * dt;

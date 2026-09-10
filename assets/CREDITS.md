@@ -1,12 +1,13 @@
 # Asset credits
 
-## The Knight — Free Sprite (player)
-- Source: OpenGameArt / GameArt2D
-- https://opengameart.org/content/the-knight-free-sprite
-- https://www.gameart2d.com/the-knight-free-sprites.html
-- Free for use in games (see source pages for full terms)
-- Packaged as horizontal strips: idle, walk, run, jump, attack, dead
+## Hero, enemies, tiles, vista (v2)
 
-## Environment / enemies / FX
-- Hills backdrop, ground & platform tiles, slime / bandit / skeleton / ogre, coin & slash FX
-- Original assets created for Ironvale
+Painted apprentice knight, goblin, bat, shield skeleton, mossy stone tiles,
+ladder, gate, coin, flag, and Forgegate vista derived from the Ironvale
+concept mockups (ChatGPT concept art used as style anchors, then isolated
+into engine-ready sprites).
+
+## Legacy pixel pack (unused in v2)
+
+- The Knight — Free Sprite (OpenGameArt / GameArt2D)
+  https://opengameart.org/content/the-knight-free-sprite

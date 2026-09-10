@@ -39,7 +39,7 @@ export function findPlatformAt(session, x, preferredY) {
  */
 export function spawnEnemy(session, type, opts = {}) {
   if (session.enemies.length >= MAX_ENEMIES) return null;
-  const def = ENEMIES[type] || ENEMIES.slime;
+  const def = ENEMIES[type] || ENEMIES.goblin;
   const scale = 1 + Math.max(0, (session.wave - 1) * 0.04);
   const ngHp = ngPlusHpMul(session.meta, NG_PLUS);
   const ngDmg = ngPlusDamageMul(session.meta, NG_PLUS);
@@ -57,14 +57,19 @@ export function spawnEnemy(session, type, opts = {}) {
     }
   }
 
-  let pl = findPlatformAt(session, spawnX, opts.y);
+  const flying = !!def.fly;
+  let pl = flying ? null : findPlatformAt(session, spawnX, opts.y);
   // If safe push left the authored platform, search again near new X
-  if (!pl || (opts.y != null && Math.abs(pl.y - opts.y) > 40)) {
+  if (!flying && (!pl || (opts.y != null && Math.abs(pl.y - opts.y) > 40))) {
     pl = findPlatformAt(session, spawnX, opts.y);
   }
   const margin = ENEMY_AI.ledgeMargin + 4;
   let x, y, homePl;
-  if (pl) {
+  if (flying) {
+    x = spawnX;
+    y = opts.y != null ? opts.y : (session.player?.y || GROUND_Y) - 80;
+    homePl = null;
+  } else if (pl) {
     homePl = pl;
     const minX = pl.x + margin;
     const maxX = pl.x + pl.w - margin;
@@ -110,6 +115,8 @@ export function spawnEnemy(session, type, opts = {}) {
     patrolMin: bounds.patrolMin, patrolMax: bounds.patrolMax,
     hitStun: 0,
     isBoss: bossFlag,
+    fly: flying,
+    blockFront: !!def.blockFront,
     hasMelee,
     hasSlam,
     meleeCfg: meleeCfg || null,

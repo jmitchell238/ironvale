@@ -4,11 +4,23 @@
  */
 
 import {
-  W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, getEnemyMeleeCfg,
+  W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, HEART,
+  getEnemyMeleeCfg,
 } from '../config/index.js';
 import { clamp } from '../core/math.js';
 import { getAttackBox, combatAttackDuration } from '../domain/combat.js';
 import { getSprite, animFrame, drawSprite, drawImageKey } from './sprites.js';
+
+function camOf(cam) {
+  if (cam && typeof cam === 'object') return { x: cam.x || 0, y: cam.y || 0 };
+  return { x: Number(cam) || 0, y: 0 };
+}
+function wx(x, cam) { return x - camOf(cam).x; }
+function wy(y, cam) { return y - camOf(cam).y; }
+function spriteCam(cam) {
+  const c = camOf(cam);
+  return { cam: c.x, camX: c.x, camY: c.y };
+}
 
 function roundRectPath(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2);
@@ -21,94 +33,89 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+function drawParallaxLayer(ctx, key, cam, factorX, factorY, yBase, height) {
+  const entry = getSprite(key);
+  if (!entry || !entry.ready) return false;
+  const img = entry.img;
+  const ch = height || Math.min(img.height, H * 0.7);
+  const scale = ch / img.height;
+  const cw = img.width * scale;
+  const c = camOf(cam);
+  const scroll = (c.x * factorX) % cw;
+  const y = yBase - c.y * factorY;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  for (let x = -scroll - cw; x < W + cw; x += cw) {
+    ctx.drawImage(img, x, y, cw, ch);
+  }
+  ctx.restore();
+  return true;
+}
+
 export function drawBackground(ctx, cam) {
-  // Sky gradient — brighter so terrain reads against it
+  const c = camOf(cam);
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#7eb0d8');
-  g.addColorStop(0.35, '#b8d4a8');
-  g.addColorStop(0.7, '#8aaa68');
-  g.addColorStop(1, '#5a7048');
+  g.addColorStop(0, '#8ec8f0');
+  g.addColorStop(0.45, '#c5e4f6');
+  g.addColorStop(0.72, '#9ec47a');
+  g.addColorStop(1, '#6a8a50');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
-  // Soft clouds (parallax far)
-  ctx.save();
-  const cloudScroll = (cam * 0.04) % 220;
-  for (let i = -1; i < 4; i++) {
-    const cx = i * 220 - cloudScroll + 40;
-    const cy = 70 + (i % 3) * 28;
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = '#eef6ff';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 42, 14, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 28, cy + 4, 30, 12, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx - 24, cy + 6, 26, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // Distant hills silhouette
-  const hills = getSprite('bg/hills');
-  if (hills && hills.ready) {
-    const img = hills.img;
-    const ch = Math.min(img.height * 0.9, (GROUND_Y - PLAY.top) * 0.52);
-    const scale = ch / img.height;
-    const cw = img.width * scale;
-    const y = GROUND_Y - ch + 8;
-    const scroll = (cam * 0.12) % cw;
+  if (!drawParallaxLayer(ctx, 'bg/sky', cam, 0.04, 0.02, -20, H * 0.55)) {
     ctx.save();
-    ctx.globalAlpha = 0.62;
-    ctx.imageSmoothingEnabled = true;
-    for (let x = -scroll - cw; x < W + cw; x += cw) {
-      ctx.drawImage(img, x, y, cw, ch);
+    const cloudScroll = (c.x * 0.04) % 280;
+    for (let i = -1; i < 6; i++) {
+      const cx = i * 280 - cloudScroll + 60;
+      const cy = 70 + (i % 3) * 22 - c.y * 0.02;
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = '#eef6ff';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 64, 18, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + 36, cy + 4, 40, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
-  } else {
-    // Procedural distant ridges
+  }
+
+  if (!drawParallaxLayer(ctx, 'bg/mountains', cam, 0.10, 0.04, H * 0.28, H * 0.42)) {
     ctx.save();
-    const scroll = (cam * 0.1) % 180;
-    ctx.fillStyle = 'rgba(70, 100, 70, 0.45)';
+    const scroll = (c.x * 0.1) % 220;
+    ctx.fillStyle = 'rgba(110, 140, 150, 0.55)';
     ctx.beginPath();
-    ctx.moveTo(-20, GROUND_Y);
-    for (let x = -scroll; x < W + 40; x += 60) {
-      const peak = GROUND_Y - 90 - Math.sin((x + cam) * 0.01) * 40;
+    ctx.moveTo(-40, H);
+    for (let x = -scroll; x < W + 80; x += 80) {
+      const peak = H * 0.38 - Math.sin((x + c.x) * 0.008) * 50 - c.y * 0.04;
       ctx.lineTo(x, peak);
     }
-    ctx.lineTo(W + 20, GROUND_Y);
+    ctx.lineTo(W + 40, H);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
 
-  // Mid-ground trees (simple silhouettes, parallax)
-  ctx.save();
-  const tScroll = (cam * 0.22) % 96;
-  for (let x = -tScroll; x < W + 40; x += 96) {
-    const base = GROUND_Y - 2;
-    const hgt = 36 + ((Math.floor(x + cam) * 17) % 28);
-    ctx.globalAlpha = 0.28;
-    ctx.fillStyle = '#2a4028';
-    ctx.fillRect(x + 18, base - hgt * 0.35, 6, hgt * 0.4);
-    ctx.beginPath();
-    ctx.moveTo(x + 4, base - hgt * 0.3);
-    ctx.lineTo(x + 21, base - hgt);
-    ctx.lineTo(x + 38, base - hgt * 0.3);
-    ctx.closePath();
-    ctx.fill();
+  drawParallaxLayer(ctx, 'bg/castle', cam, 0.16, 0.05, H * 0.22, H * 0.5);
+
+  if (!drawParallaxLayer(ctx, 'bg/forest', cam, 0.28, 0.08, H * 0.48, H * 0.4)) {
+    ctx.save();
+    const tScroll = (c.x * 0.28) % 110;
+    for (let x = -tScroll; x < W + 50; x += 110) {
+      const base = H * 0.82 - c.y * 0.08;
+      const hgt = 48 + ((Math.floor(x + c.x) * 17) % 36);
+      ctx.globalAlpha = 0.32;
+      ctx.fillStyle = '#2a4a30';
+      ctx.fillRect(x + 22, base - hgt * 0.35, 7, hgt * 0.4);
+      ctx.beginPath();
+      ctx.moveTo(x + 4, base - hgt * 0.28);
+      ctx.lineTo(x + 26, base - hgt);
+      ctx.lineTo(x + 48, base - hgt * 0.28);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
-  ctx.restore();
 
-  // Deep soil under the playfield (readable floor bed)
-  const soil = ctx.createLinearGradient(0, GROUND_Y, 0, H);
-  soil.addColorStop(0, '#4a3828');
-  soil.addColorStop(0.15, '#3a2a1c');
-  soil.addColorStop(1, '#1e1610');
-  ctx.fillStyle = soil;
-  ctx.fillRect(0, GROUND_Y + 2, W, H - GROUND_Y);
-
-  // Grass strip at world floor line for depth cue when no platform tile
-  ctx.fillStyle = 'rgba(70, 130, 55, 0.35)';
-  ctx.fillRect(0, GROUND_Y, W, 4);
+  drawParallaxLayer(ctx, 'bg/bridge', cam, 0.42, 0.12, H * 0.55, H * 0.28);
 }
 
 /**
@@ -194,45 +201,105 @@ function drawPlatformBlock(ctx, pl, x) {
 }
 
 export function drawPlatforms(ctx, platforms, cam) {
-  // Sort back-to-front: higher Y (lower on screen) drawn later for overlap
   const list = platforms.slice().sort((a, b) => a.y - b.y);
   for (const pl of list) {
-    const x = pl.x - cam;
-    if (x + pl.w < -30 || x > W + 30) continue;
+    const x = wx(pl.x, cam);
+    const y = wy(pl.y, cam);
+    if (x + pl.w < -40 || x > W + 40) continue;
+    if (y < -90 || y > H + 90) continue;
+    drawPlatformBlock(ctx, { ...pl, y }, x);
 
-    // Prefer rich procedural blocks (tiles alone read as flat bars)
-    drawPlatformBlock(ctx, pl, x);
-
-    // Optional tile overlay for texture (subtle)
-    const key = pl.ground ? 'tile/ground' : 'tile/platform';
+    const key = pl.style === 'bridge' ? 'tile/platform' : (pl.ground ? 'tile/ground' : 'tile/platform');
     const tile = getSprite(key);
     if (tile && tile.ready && pl.w > 80) {
       ctx.save();
-      ctx.globalAlpha = 0.22;
-      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 0.45;
+      ctx.imageSmoothingEnabled = true;
       const tw = 48;
-      const th = pl.ground ? 28 : 18;
+      const th = pl.ground ? 32 : 18;
       for (let px = 0; px < pl.w; px += tw) {
         const ww = Math.min(tw, pl.w - px);
-        ctx.drawImage(tile.img, x + px, pl.y, ww, th);
+        ctx.drawImage(tile.img, x + px, y, ww, th);
       }
       ctx.restore();
-      // Re-draw crisp grass top over texture
-      ctx.fillStyle = 'rgba(100, 180, 60, 0.55)';
-      ctx.fillRect(x, pl.y - 2, pl.w, 4);
-      ctx.fillStyle = 'rgba(220, 190, 80, 0.5)';
-      ctx.fillRect(x, pl.y - 2, pl.w, 1);
+    }
+  }
+}
+
+export function drawLadders(ctx, ladders, cam) {
+  if (!ladders?.length) return;
+  for (const l of ladders) {
+    const x = wx(l.x, cam);
+    const y = wy(l.y, cam);
+    if (x < -40 || x > W + 40) continue;
+    const tile = getSprite('tile/ladder');
+    ctx.save();
+    if (tile && tile.ready) {
+      ctx.imageSmoothingEnabled = true;
+      const tw = 28;
+      const th = 24;
+      for (let yy = 0; yy < l.h; yy += th) {
+        const hh = Math.min(th, l.h - yy);
+        ctx.drawImage(tile.img, x - tw / 2, y + yy, tw, hh);
+      }
+    } else {
+      ctx.fillStyle = '#8a6238';
+      ctx.fillRect(x - 10, y, 4, l.h);
+      ctx.fillRect(x + 6, y, 4, l.h);
+      ctx.fillStyle = '#c4a06a';
+      for (let yy = 6; yy < l.h; yy += 16) ctx.fillRect(x - 10, y + yy, 20, 4);
+    }
+    ctx.restore();
+  }
+}
+
+export function drawProps(ctx, props, cam) {
+  if (!props?.length) return;
+  for (const pr of props) {
+    const key = 'prop/' + pr.type;
+    const x = wx(pr.x, cam);
+    const y = wy(pr.y, cam);
+    if (x < -60 || x > W + 60) continue;
+    if (!drawImageKey(ctx, key, x - 16, y - 36, 32, 36)) {
+      if (pr.type === 'torch') {
+        ctx.fillStyle = '#6a4420';
+        ctx.fillRect(x - 2, y - 28, 4, 28);
+        ctx.fillStyle = '#ffb347';
+        ctx.beginPath(); ctx.arc(x, y - 30, 5, 0, Math.PI * 2); ctx.fill();
+      } else if (pr.type === 'banner') {
+        ctx.fillStyle = '#3a5a9a';
+        ctx.fillRect(x - 10, y, 20, 36);
+        ctx.fillStyle = '#c9a227';
+        ctx.fillRect(x - 6, y + 8, 12, 10);
+      } else if (pr.type === 'sign') {
+        ctx.fillStyle = '#7a5a30';
+        ctx.fillRect(x - 2, y - 28, 4, 28);
+        ctx.fillRect(x - 18, y - 40, 40, 16);
+      } else if (pr.type === 'crate' || pr.type === 'barrel') {
+        ctx.fillStyle = pr.type === 'crate' ? '#8a6238' : '#6a4a28';
+        ctx.fillRect(x - 12, y - 22, 24, 22);
+      } else if (pr.type === 'chain') {
+        ctx.strokeStyle = '#6a6a70';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x, y - 40); ctx.lineTo(x, y); ctx.stroke();
+      }
     }
   }
 }
 
 function playerAnimKey(p) {
-  if (p.hp <= 0) return 'player/dead';
-  if (p.attacking) return p.attackAir ? 'player/jump_attack' : 'player/attack';
-  if (!p.onGround) return 'player/jump';
-  if (p.ducking) return 'player/idle';
+  if (p.hp <= 0) return 'player/hurt';
+  if (p.inv > 0.4 && p.hp > 0) {
+    /* flash handled via alpha; keep pose */
+  }
+  if (p.attacking) return 'player/attack';
+  if (p.climbing) return 'player/idle';
+  if (p.ducking) return getSprite('player/duck')?.ready ? 'player/duck' : 'player/idle';
+  if (!p.onGround) {
+    if ((p.airJumps || 0) <= 0 && getSprite('player/djump')?.ready) return 'player/djump';
+    return 'player/jump';
+  }
   if (Math.abs(p.vx) > 40) return 'player/run';
-  if (Math.abs(p.vx) > 15) return 'player/walk';
   return 'player/idle';
 }
 
@@ -257,21 +324,20 @@ export function drawPlayer(ctx, p, t, cam, stats) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.ellipse(p.x - cam, p.y - 1, p.ducking ? 16 : 14, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(wx(p.x, cam), wy(p.y, cam) - 1, p.ducking ? 16 : 14, 4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   const flash = p.inv > 0 && Math.floor(t * 18) % 2 === 0;
-  let scale = PLAYER_DRAW.drawScale || 1.35;
-  // Squash sprite when ducking (no dedicated crouch sheet)
-  if (p.ducking) scale *= 0.72;
+  let scale = PLAYER_DRAW.drawScale || 1.15;
+  if (p.ducking && key !== 'player/duck') scale *= 0.72;
   const footY = p.ducking ? p.y + 4 : p.y + 2;
   const ok = drawSprite(ctx, key, frame, p.x, footY, {
-    scale, flip: (p.facing || 1) < 0, cam, alpha: flash ? 0.4 : 1,
+    scale, flip: (p.facing || 1) < 0, ...spriteCam(cam), alpha: flash ? 0.4 : 1,
   });
   if (!ok) {
-    ctx.fillStyle = '#c0c8d0';
-    ctx.fillRect(p.x - cam - 10, p.y - p.h, 20, p.h);
+    ctx.fillStyle = '#3a6aa0';
+    ctx.fillRect(wx(p.x, cam) - 10, wy(p.y, cam) - p.h, 20, p.h);
   }
 
   if (p.attacking && p.attackT > atkFull * 0.25) {
@@ -286,7 +352,7 @@ export function drawPlayer(ctx, p, t, cam, stats) {
     const fxH = p.attackAir ? 32 : 24;
     const life = clamp(p.attackT / atkFull, 0, 1);
     ctx.save();
-    ctx.translate(midX - cam, midY);
+    ctx.translate(wx(midX, cam), wy(midY, cam));
     if (dir < 0) ctx.scale(-1, 1);
     if (p.attackAir) ctx.rotate(0.35);
     ctx.globalAlpha = 0.55 + life * 0.35;
@@ -302,20 +368,15 @@ export function drawPlayer(ctx, p, t, cam, stats) {
 }
 
 export function drawEnemy(ctx, e, cam, t) {
-  const sx = e.x - cam;
+  const sx = wx(e.x, cam);
+  const sy = wy(e.y, cam);
   if (sx < -80 || sx > W + 80) return;
-  const key = 'enemy/' + (e.skin || 'slime');
+  if (sy < -120 || sy > H + 80) return;
+  const key = 'enemy/' + (e.skin || 'goblin');
   const entry = getSprite(key);
   const frame = entry && entry.meta ? animFrame(entry.meta, e.phase * 0.5, 1) : 0;
-  const bossLike = !!(e.isBoss || e.type === 'boss' || e.type === 'bandit_captain'
-    || e.type === 'skeleton_champion' || e.type === 'ogre_warchief');
-  const scale = e.drawScale
-    || (e.type === 'boss' ? 1.6
-      : e.type === 'ogre_warchief' ? 1.75
-      : e.type === 'skeleton_champion' ? 1.55
-      : e.type === 'bandit_captain' ? 1.5
-      : e.type === 'ogre' ? 1.35
-      : 1.3);
+  const bossLike = !!(e.isBoss || e.type === 'iron_warden');
+  const scale = e.drawScale || (e.type === 'iron_warden' ? 1.35 : 1.15);
 
   // Melee telegraph: ground / strike warning during windup/active
   if (e.slamState === 'windup' || e.slamState === 'slam') {
@@ -335,24 +396,23 @@ export function drawEnemy(ctx, e, cam, t) {
       ? (heavy ? 'rgba(220,40,30,0.55)' : 'rgba(230,70,50,0.45)')
       : (heavy ? 'rgba(255,90,40,0.4)' : 'rgba(255,160,60,0.38)');
     ctx.beginPath();
-    ctx.ellipse(warnX, e.y - 2, elW, elH, 0, 0, Math.PI * 2);
+    ctx.ellipse(warnX, sy - 2, elW, elH, 0, 0, Math.PI * 2);
     ctx.fill();
     if (e.slamState === 'windup') {
       ctx.strokeStyle = heavy ? 'rgba(255,200,80,0.85)' : 'rgba(255,220,120,0.9)';
       ctx.lineWidth = heavy ? 2 : 1.5;
       ctx.setLineDash(heavy ? [6, 4] : [4, 3]);
       ctx.beginPath();
-      ctx.ellipse(warnX, e.y - 2, elW, elH, 0, 0, Math.PI * 2);
+      ctx.ellipse(warnX, sy - 2, elW, elH, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      // Light slash: short arc cue in facing direction
       if (!heavy) {
         ctx.strokeStyle = 'rgba(255,230,160,0.55)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         const arcR = range * 0.55;
         const base = sx + face * (e.w * 0.15);
-        const ay = e.y - e.h * 0.45;
+        const ay = sy - e.h * 0.45;
         ctx.arc(base, ay, arcR, face > 0 ? -0.9 : Math.PI - 0.2, face > 0 ? 0.2 : Math.PI + 0.9);
         ctx.stroke();
       }
@@ -363,27 +423,27 @@ export function drawEnemy(ctx, e, cam, t) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(sx, e.y - 1, e.w * 0.4, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(sx, sy - 1, e.w * 0.4, 3, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   const slamFlash = e.slamState === 'windup' ? 0.55 + 0.25 * Math.sin(t * 20) : 1;
   const alpha = e.flash > 0 ? 0.5 : slamFlash;
   const ok = drawSprite(ctx, key, frame, e.x, e.y + 2, {
-    scale, flip: (e.facing || -1) > 0, cam, alpha,
+    scale, flip: (e.facing || -1) > 0, ...spriteCam(cam), alpha,
   });
   if (!ok) {
     ctx.fillStyle = e.slamState === 'windup' ? '#c44' : e.color;
-    ctx.fillRect(sx - e.w / 2, e.y - e.h, e.w, e.h);
+    ctx.fillRect(sx - e.w / 2, sy - e.h, e.w, e.h);
   }
 
-  if (bossLike || e.type === 'ogre' || e.hp < e.maxHp * 0.95) {
+  if (bossLike || e.hp < e.maxHp * 0.95) {
     const bw = Math.max(e.w, 28);
     const ratio = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(sx - bw / 2, e.y - e.h * scale * 0.55 - 10, bw, 4);
+    ctx.fillRect(sx - bw / 2, sy - e.h * scale * 0.55 - 10, bw, 4);
     ctx.fillStyle = ratio > 0.35 ? '#7dffa0' : '#e74c3c';
-    ctx.fillRect(sx - bw / 2, e.y - e.h * scale * 0.55 - 10, bw * ratio, 4);
+    ctx.fillRect(sx - bw / 2, sy - e.h * scale * 0.55 - 10, bw * ratio, 4);
   }
 
   if (e.label && bossLike) {
@@ -391,7 +451,7 @@ export function drawEnemy(ctx, e, cam, t) {
     const label = e.label;
     ctx.font = 'bold 11px system-ui,sans-serif';
     const tw = ctx.measureText(label).width;
-    const ly = e.y - e.h * scale * 0.55 - 22;
+    const ly = sy - e.h * scale * 0.55 - 22;
     ctx.fillRect(sx - tw / 2 - 4, ly - 10, tw + 8, 14);
     ctx.fillStyle = '#f5e6c8';
     ctx.textAlign = 'center';
@@ -402,10 +462,12 @@ export function drawEnemy(ctx, e, cam, t) {
 
 export function drawCoin(ctx, c, t, cam) {
   const bob = Math.sin(t * 5 + c.x) * 2;
-  if (!drawImageKey(ctx, 'fx/coin', c.x - cam - 8, c.y + bob - 8, 16, 16)) {
+  const x = wx(c.x, cam);
+  const y = wy(c.y, cam) + bob;
+  if (!drawImageKey(ctx, 'prop/coin', x - 8, y - 8, 16, 16)) {
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
-    ctx.arc(c.x - cam, c.y + bob, 5, 0, Math.PI * 2);
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -415,7 +477,7 @@ export function drawParticles(ctx, particles, cam) {
     ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
     ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x - cam, p.y, p.r, 0, Math.PI * 2);
+    ctx.arc(wx(p.x, cam), wy(p.y, cam), p.r, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -429,64 +491,87 @@ export function drawParticles(ctx, particles, cam) {
  * @param {string} [opts.stageLabel]
  * @param {string} [opts.phaseLabel]
  */
+function drawHeartIcon(ctx, x, y, s, fill) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s / 16, s / 16);
+  ctx.beginPath();
+  ctx.moveTo(0, 5);
+  ctx.bezierCurveTo(-8, -4, -16, 4, 0, 16);
+  ctx.bezierCurveTo(16, 4, 8, -4, 0, 5);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawHud(ctx, p, sc, best, opts = {}) {
   const stageLabel = opts.stageLabel || 'STAGE';
   const phaseLabel = opts.phaseLabel || '';
+  const coins = opts.coins != null ? opts.coins : 0;
 
-  ctx.fillStyle = 'rgba(20, 14, 10, 0.78)';
-  ctx.fillRect(0, 0, W, PLAY.top - 2);
-  ctx.fillStyle = 'rgba(201, 162, 39, 0.35)';
-  ctx.fillRect(0, PLAY.top - 3, W, 2);
-
-  ctx.fillStyle = '#f5e6c8';
-  ctx.font = 'bold 15px system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(Math.floor(sc).toLocaleString(), 14, 22);
-  ctx.fillStyle = '#a89070';
-  ctx.font = '11px system-ui, sans-serif';
-  ctx.fillText('BEST ' + Math.floor(best).toLocaleString(), 14, 40);
-
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#c9a227';
-  ctx.font = 'bold 12px system-ui, sans-serif';
-  ctx.fillText(stageLabel, W - 14, 22);
-  ctx.fillStyle = '#a89070';
-  ctx.font = '11px system-ui, sans-serif';
-  const pts = opts.unspentPoints != null ? opts.unspentPoints : null;
-  let rightSub = phaseLabel || ('LV ' + (p ? p.level : 1));
-  if (pts != null && pts > 0 && !phaseLabel) rightSub = 'LV ' + (p ? p.level : 1) + ' · +' + pts + 'pt';
-  else if (!phaseLabel && p) rightSub = 'LV ' + p.level;
-  ctx.fillText(rightSub, W - 14, 40);
-
+  // Top-left: portrait, hearts, coins, XP
+  ctx.save();
   if (p) {
-    const bx = 14, by = H - 96, bw = W - 28, bh = 11;
+    ctx.fillStyle = 'rgba(24, 18, 12, 0.55)';
+    ctx.beginPath();
+    ctx.arc(34, 34, 26, 0, Math.PI * 2);
+    ctx.fill();
+    if (!drawImageKey(ctx, 'player/portrait', 10, 10, 48, 48)) {
+      ctx.fillStyle = '#3a6aa0';
+      ctx.beginPath(); ctx.arc(34, 34, 20, 0, Math.PI * 2); ctx.fill();
+    }
+
+    const heartHp = HEART || 25;
+    const maxHearts = Math.max(1, Math.ceil((p.maxHp || 100) / heartHp));
+    const hp = Math.max(0, p.hp || 0);
+    for (let i = 0; i < maxHearts; i++) {
+      const hx = 70 + i * 22;
+      const filled = hp > i * heartHp;
+      const half = !filled && hp > (i - 0.5) * heartHp + heartHp * 0.5;
+      const col = filled ? '#e74c3c' : (half ? '#e74c3c' : 'rgba(40,20,20,0.45)');
+      drawHeartIcon(ctx, hx, 22, half && !filled ? 14 : 16, col);
+    }
+
+    ctx.fillStyle = '#f5e6c8';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🪙  × ' + coins, 68, 48);
+
+    const bx = 68, by = 62, bw = 160, bh = 10;
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     roundRectPath(ctx, bx, by, bw, bh, 4); ctx.fill();
-    const ratio = clamp(p.hp / p.maxHp, 0, 1);
-    ctx.fillStyle = '#c0392b';
-    if (ratio > 0.01) {
-      ctx.save();
-      roundRectPath(ctx, bx, by, bw * ratio, bh, 4); ctx.clip();
-      ctx.fillRect(bx, by, bw * ratio, bh);
-      ctx.restore();
-    }
-    const xy = by + 16;
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    roundRectPath(ctx, bx, xy, bw, 7, 3); ctx.fill();
     const xr = p.xpNext > 0 ? clamp(p.xp / p.xpNext, 0, 1) : 0;
-    ctx.fillStyle = '#c9a227';
+    ctx.fillStyle = '#3d7ec9';
     if (xr > 0.01) {
       ctx.save();
-      roundRectPath(ctx, bx, xy, bw * xr, 7, 3); ctx.clip();
-      ctx.fillRect(bx, xy, bw * xr, 7);
+      roundRectPath(ctx, bx, by, bw * xr, bh, 4); ctx.clip();
+      ctx.fillRect(bx, by, bw * xr, bh);
       ctx.restore();
     }
+    ctx.fillStyle = '#c9a227';
+    ctx.font = 'bold 9px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Lv ' + (p.level || 1), bx + bw + 22, by + 5);
   }
+
+  // Top-right stage banner
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(28, 22, 16, 0.55)';
+  roundRectPath(ctx, W - 320, 12, 306, 40, 8); ctx.fill();
+  ctx.fillStyle = '#f5e6c8';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText(stageLabel, W - 22, 24);
+  ctx.fillStyle = '#c9b48a';
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.fillText(phaseLabel || 'Explore  ·  Climb  ·  Fight  ·  Discover', W - 22, 40);
+  ctx.restore();
 }
 
 export function drawControls(ctx, stick) {
-  const cx = 64, cy = H - 48, br = 36;
+  const cx = 70, cy = H - 52, br = 38;
   ctx.save();
   ctx.globalAlpha = stick.active ? 0.55 : 0.3;
   ctx.fillStyle = 'rgba(30, 22, 16, 0.9)';
@@ -505,7 +590,7 @@ export function drawControls(ctx, stick) {
   ctx.textAlign = 'center';
   ctx.fillText('↓ duck', cx, cy + br + 12);
 
-  const jx = W - 58, jy = H - 52;
+  const jx = W - 62, jy = H - 50;
   ctx.globalAlpha = stick.jumpDown ? 0.75 : 0.35;
   ctx.fillStyle = 'rgba(40, 28, 18, 0.9)';
   ctx.strokeStyle = 'rgba(201, 162, 39, 0.7)';
@@ -521,7 +606,7 @@ export function drawControls(ctx, stick) {
   ctx.fillStyle = '#a89070';
   ctx.fillText('×2 air', jx, jy + 32);
 
-  const ax = W - 58, ay = H - 118;
+  const ax = W - 140, ay = H - 50;
   ctx.globalAlpha = stick.attackDown ? 0.8 : 0.38;
   ctx.fillStyle = 'rgba(50, 20, 20, 0.9)';
   ctx.strokeStyle = 'rgba(231, 76, 60, 0.7)';
@@ -587,57 +672,51 @@ export function levelUpHitTest(clientY, rect, choices) {
 }
 
 export function drawIdleDecor(ctx, t) {
-  const platforms = [
-    { x: 0, y: GROUND_Y, w: 400, h: 28, ground: true },
-    { x: 80, y: GROUND_Y - 90, w: 100, h: 14, ground: false },
-  ];
-  drawBackground(ctx, t * 20);
-  drawPlatforms(ctx, platforms, 0);
-  drawPlayer(ctx, {
-    x: 110, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h, facing: 1,
-    onGround: true, anim: t * 0.8, vx: 30, vy: 0, hp: 100, inv: 0, attacking: false, attackT: 0,
-  }, t, 0, null);
-  drawEnemy(ctx, {
-    x: 250, y: GROUND_Y, w: 26, h: 22, type: 'slime', skin: 'slime', color: '#3d8b3d',
-    hp: 1, maxHp: 1, flash: 0, facing: -1, phase: t, frames: 4, fw: 32, fh: 32,
-  }, 0, t);
-  drawEnemy(ctx, {
-    x: 300, y: GROUND_Y, w: 28, h: 42, type: 'bandit', skin: 'bandit', color: '#8b0000',
-    hp: 1, maxHp: 1, flash: 0, facing: -1, phase: t + 1, frames: 4, fw: 40, fh: 48,
-  }, 0, t);
+  const cam = { x: t * 18, y: GROUND_Y - H * 0.62 };
+  drawBackground(ctx, cam);
 }
 
 export function drawLoading(ctx) {
-  ctx.fillStyle = '#1a1420';
+  ctx.fillStyle = '#1a2430';
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#f5e6c8';
   ctx.font = 'bold 18px system-ui';
   ctx.textAlign = 'center';
-  ctx.fillText('Loading the realm…', W / 2, H / 2);
+  ctx.fillText('A brighter vale awaits…', W / 2, H / 2);
 }
 
 /** End gate pillar (world space). */
-export function drawGate(ctx, gateX, cam, open) {
-  if (gateX == null) return;
-  const x = gateX - cam;
-  if (x < -40 || x > W + 40) return;
-  const baseY = GROUND_Y;
-  const h = 96;
+export function drawGate(ctx, gate, cam, open) {
+  if (!gate && gate !== 0) return;
+  const gx = typeof gate === 'object' ? gate.x : gate;
+  const gy = typeof gate === 'object' ? gate.y + (gate.h || 120) : GROUND_Y;
+  const gh = typeof gate === 'object' ? (gate.h || 120) : 110;
+  const gw = typeof gate === 'object' ? (gate.w || 64) : 56;
+  const x = wx(gx, cam);
+  const y = wy(gy, cam);
+  if (x < -80 || x > W + 80) return;
   ctx.save();
-  // Posts
-  ctx.fillStyle = open ? 'rgba(201, 162, 39, 0.85)' : 'rgba(90, 70, 50, 0.9)';
-  ctx.fillRect(x - 10, baseY - h, 8, h);
-  ctx.fillRect(x + 18, baseY - h, 8, h);
-  // Lintel
-  ctx.fillRect(x - 14, baseY - h - 10, 50, 12);
-  // Banner
-  ctx.fillStyle = open ? 'rgba(80, 160, 90, 0.55)' : 'rgba(40, 30, 24, 0.65)';
-  ctx.fillRect(x - 4, baseY - h + 8, 24, 36);
-  ctx.fillStyle = open ? '#e8f5d0' : '#a89070';
-  ctx.font = 'bold 9px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(open ? 'OPEN' : 'GATE', x + 8, baseY - h + 26);
+  if (drawImageKey(ctx, 'prop/gate', x - 8, y - gh, gw + 16, gh)) {
+    if (open) {
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#7dffa0';
+      ctx.fillRect(x, y - gh, gw, gh);
+    }
+    ctx.restore();
+    return;
+  }
+  ctx.fillStyle = open ? 'rgba(201, 162, 39, 0.85)' : 'rgba(50, 44, 40, 0.95)';
+  ctx.fillRect(x, y - gh, 8, gh);
+  ctx.fillRect(x + gw - 8, y - gh, 8, gh);
+  ctx.fillRect(x - 4, y - gh - 10, gw + 8, 12);
+  ctx.fillStyle = open ? 'rgba(80, 160, 90, 0.4)' : 'rgba(20, 18, 16, 0.75)';
+  ctx.fillRect(x + 8, y - gh + 8, gw - 16, gh - 16);
+  if (!open) {
+    ctx.fillStyle = '#c9a227';
+    ctx.beginPath();
+    ctx.arc(x + gw / 2, y - gh * 0.45, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -652,22 +731,22 @@ export function drawGate(ctx, gateX, cam, open) {
 export function drawCheckpoints(ctx, checkpoints, cam, reached, activeId) {
   if (!checkpoints?.length) return;
   for (const cp of checkpoints) {
-    const x = cp.x - cam;
-    if (x < -30 || x > W + 30) continue;
-    const baseY = cp.y ?? GROUND_Y;
+    const x = wx(cp.x, cam);
+    const baseY = wy(cp.y ?? GROUND_Y, cam);
+    if (x < -40 || x > W + 40) continue;
     const on = reached?.has(cp.id) || cp.id === activeId;
     ctx.save();
-    // Pole
-    ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.9)' : 'rgba(100, 80, 55, 0.85)';
-    ctx.fillRect(x - 2, baseY - 52, 4, 52);
-    // Flag
-    ctx.fillStyle = on ? 'rgba(80, 160, 90, 0.85)' : 'rgba(70, 55, 40, 0.7)';
-    ctx.beginPath();
-    ctx.moveTo(x + 2, baseY - 52);
-    ctx.lineTo(x + 22, baseY - 42);
-    ctx.lineTo(x + 2, baseY - 32);
-    ctx.closePath();
-    ctx.fill();
+    if (!drawImageKey(ctx, 'prop/flag', x - 10, baseY - 52, 28, 52)) {
+      ctx.fillStyle = on ? 'rgba(201, 162, 39, 0.9)' : 'rgba(100, 80, 55, 0.85)';
+      ctx.fillRect(x - 2, baseY - 52, 4, 52);
+      ctx.fillStyle = on ? 'rgba(80, 160, 90, 0.85)' : '#3a5a9a';
+      ctx.beginPath();
+      ctx.moveTo(x + 2, baseY - 52);
+      ctx.lineTo(x + 22, baseY - 42);
+      ctx.lineTo(x + 2, baseY - 32);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.restore();
   }
 }
@@ -677,10 +756,10 @@ export function drawArenaBounds(ctx, arena, cam) {
   if (!arena) return;
   ctx.save();
   ctx.fillStyle = 'rgba(180, 40, 40, 0.18)';
-  const left = arena.minX - cam;
-  const right = arena.maxX - cam;
-  if (left > -20) ctx.fillRect(left - 6, PLAY.top, 6, GROUND_Y - PLAY.top);
-  if (right < W + 20) ctx.fillRect(right, PLAY.top, 6, GROUND_Y - PLAY.top);
+  const left = wx(arena.minX, cam);
+  const right = wx(arena.maxX, cam);
+  if (left > -20) ctx.fillRect(left - 6, 0, 6, H);
+  if (right < W + 20) ctx.fillRect(right, 0, 6, H);
   ctx.fillStyle = 'rgba(231, 76, 60, 0.75)';
   ctx.font = 'bold 12px system-ui';
   ctx.textAlign = 'center';
@@ -690,7 +769,7 @@ export function drawArenaBounds(ctx, arena, cam) {
 
 /** Full frame for an active session. */
 export function drawSession(ctx, session, t, stick, bestScore) {
-  const cam = session.cameraX;
+  const cam = { x: session.cameraX || 0, y: session.cameraY || 0 };
   ctx.save();
   if (session.shake > 0 && (session.screen === 'play' || session.screen === 'levelup')) {
     const s = Math.min(session.shake, 3) * 0.35;
@@ -709,6 +788,8 @@ export function drawSession(ctx, session, t, stick, bestScore) {
   } else if (inWorld && session.player) {
     drawBackground(ctx, cam);
     drawPlatforms(ctx, session.platforms, cam);
+    drawLadders(ctx, session.ladders, cam);
+    drawProps(ctx, session.level?.props, cam);
     if (session.levelPhase === 'explore') {
       drawCheckpoints(
         ctx,
@@ -717,7 +798,12 @@ export function drawSession(ctx, session, t, stick, bestScore) {
         session.reachedCheckpoints,
         session.activeCheckpoint?.id || null,
       );
-      drawGate(ctx, session.getGateX?.() ?? session.level?.gateX, cam, session.isGateOpen?.() ?? false);
+      drawGate(
+        ctx,
+        session.level?.gate || session.getGateX?.() || session.level?.gateX,
+        cam,
+        session.isGateOpen?.() ?? false,
+      );
     }
     if (session.levelPhase === 'boss') {
       drawArenaBounds(ctx, session.arena, cam);
@@ -727,16 +813,14 @@ export function drawSession(ctx, session, t, stick, bestScore) {
     if (session.player) drawPlayer(ctx, session.player, t, cam, session.stats);
     drawParticles(ctx, session.particles, cam);
 
-    const stageLabel = session.level
-      ? `${session.level.order}. ${session.level.name}`
+    let stageLabel = session.level
+      ? `STAGE ${session.level.order}: ${session.level.name.toUpperCase()}`
       : ('STAGE ' + (session.wave || 1));
     let phaseLabel = '';
-    if (session.levelPhase === 'boss') phaseLabel = 'BOSS';
-    else if (session.isGateOpen?.()) phaseLabel = 'GATE OPEN';
-    else if (session.activeCheckpoint) phaseLabel = '⚑ CHECKPOINT';
-    if (session.meta?.ngPlus > 0) {
-      stageLabel += ` · NG+${session.meta.ngPlus}`;
-    }
+    if (session.levelPhase === 'boss') phaseLabel = 'The Iron Warden';
+    else if (session.isGateOpen?.()) phaseLabel = 'Gate open';
+    else if (session.activeCheckpoint) phaseLabel = 'Checkpoint';
+    if (session.meta?.ngPlus > 0) stageLabel += `  ·  NG+${session.meta.ngPlus}`;
 
     drawHud(
       ctx,
@@ -746,6 +830,7 @@ export function drawSession(ctx, session, t, stick, bestScore) {
       {
         stageLabel,
         phaseLabel,
+        coins: session.coinsCollected || 0,
         unspentPoints: session.meta ? session.meta.unspentPoints : 0,
       },
     );
@@ -753,6 +838,5 @@ export function drawSession(ctx, session, t, stick, bestScore) {
   } else {
     drawIdleDecor(ctx, t);
   }
-  // Blessing-card overlay retired (P3 RPG allocate is DOM).
   ctx.restore();
 }

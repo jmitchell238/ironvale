@@ -1,8 +1,8 @@
 # Ironvale — Architecture
 
-Clean, layered architecture for a medieval action-platformer (Castlevania-style campaign).
+Clean, layered architecture for a hopeful 2D action-platformer.
 
-**Version:** 1.4.100 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
+**Version:** 2.0.000 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
 
 ---
 
@@ -10,10 +10,10 @@ Clean, layered architecture for a medieval action-platformer (Castlevania-style 
 
 | | |
 |--|--|
-| **Pitch** | Knight platformer: run, jump, sword combat through Ironvale. |
-| **Product direction** | Discrete **levels** → end boss → clear campaign; persistent RPG stats **between levels**. |
-| **Current loop** | Campaign stages (level select → explore encounters → end gate → boss → clear/fail). |
-| **Feel targets** | Long sword hitbox, jump attack, ledge-safe enemies (P0). Telegraphed enemy melee (bandit/ogre/boss); slime contact-only. |
+| **Pitch** | Apprentice knight: explore, climb, fight, open the gate toward a brighter vale. |
+| **Product direction** | Four biomes → Iron Warden; persistent forge training **between stages**. |
+| **Current loop** | Level select → explore (ladders, encounters) → locked gate → (boss on L4) → clear/fail. |
+| **Feel targets** | Landscape camera, climb, duck, double jump, telegraphed goblin/skeleton melee, contact bats, shield block. |
 
 ---
 
@@ -111,7 +111,7 @@ Single source of run mutation; systems do the work:
 
 ```js
 const session = new GameSession({ audio, save });
-session.loadLevel('outer-vale'); // or startRun(levelId)
+session.loadLevel('forgegate-fields'); // or startRun(levelId)
 session.update(dt, { x, y, jump, attack });
 // session.screen: 'menu' | 'select' | 'play' | 'allocate' | 'clear' | 'over'
 // session.levelPhase: 'explore' | 'boss' | 'done'
@@ -201,6 +201,7 @@ Not covered: browser pixels, touch hardware, PWA install UI.
 | **P1b systems extract** | Done (v1.3.200) | `world/systems/*` — thin GameSession facade |
 | **P4 Scale + polish** | Done (v1.4.000) | 10 stages, checkpoints, hitstop juice, New Game+ |
 | **Feel + art** | Done (v1.4.100) | Safe spawns, duck + double-jump, readable platforms, Mario-style L1 |
+| **Rethink 2.0** | Done (v2.0.000) | Landscape 960×540, 2-axis camera, ladders, 4 biomes, Forgegate Fields, painted apprentice knight |
 
 ---
 

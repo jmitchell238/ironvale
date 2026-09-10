@@ -2,7 +2,7 @@
 
 import { defaultMeta, normalizeMeta } from '../domain/rpg.js';
 
-const SAVE_KEY = 'ironvale-v1';
+const SAVE_KEY = 'ironvale-v2';
 
 function defaultSave() {
   const meta = defaultMeta();

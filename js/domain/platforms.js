@@ -4,7 +4,7 @@
 
 import { clamp, lerp, rand } from '../core/math.js';
 import {
-  GROUND_Y, PLAY, JUMP_SAFE, MAX_PLATFORMS, W,
+  GROUND_Y, JUMP_SAFE, MAX_PLATFORMS, W,
   maxJumpHeight, maxJumpDistance,
 } from '../config/index.js';
 
@@ -15,20 +15,87 @@ import {
  * @param {{ style?: string, h?: number }} [opts]
  */
 export function makePlatform(x, y, w, opts = {}) {
-  const ground = y >= GROUND_Y - 2;
+  const style = opts.style || (y >= GROUND_Y - 2 ? 'ground' : 'float');
+  const ground = style === 'ground' || y >= GROUND_Y - 2;
   const minW = JUMP_SAFE.minWidth != null ? JUMP_SAFE.minWidth : 56;
-  const style = opts.style || (ground ? 'ground' : 'float');
   const h = opts.h != null
     ? opts.h
-    : (ground ? 28 : style === 'stone' ? 18 : 16);
+    : (ground ? 36 : style === 'stone' ? 22 : style === 'bridge' ? 16 : 18);
   return {
     x,
-    y: clamp(y, PLAY.top + 90, GROUND_Y),
+    y,
     w: Math.max(minW, w),
     h,
     ground,
     style,
+    kind: 'platform',
   };
+}
+
+/**
+ * Ladder column. `y` is the top (dismount onto the upper platform),
+ * `h` is height downward.
+ */
+export function makeLadder(x, y, h, opts = {}) {
+  const w = opts.w != null ? opts.w : 28;
+  return {
+    kind: 'ladder',
+    type: 'ladder',
+    x,
+    y,
+    w,
+    h: Math.max(40, h),
+  };
+}
+
+export function ladderAabb(l) {
+  if (!l) return null;
+  return { x: l.x - l.w / 2, y: l.y, w: l.w, h: l.h };
+}
+
+/**
+ * True if the player's body overlaps a ladder enough to grab.
+ */
+export function playerOverlapsLadder(p, ladder) {
+  if (!p || !ladder) return false;
+  const box = ladderAabb(ladder);
+  const left = p.x - p.w * 0.35;
+  const right = p.x + p.w * 0.35;
+  const top = p.y - p.h;
+  const bot = p.y + 4;
+  return right > box.x && left < box.x + box.w && bot > box.y && top < box.y + box.h;
+}
+
+export function findLadderAt(p, ladders) {
+  if (!p || !ladders) return null;
+  for (let i = 0; i < ladders.length; i++) {
+    if (playerOverlapsLadder(p, ladders[i])) return ladders[i];
+  }
+  return null;
+}
+
+/**
+ * Solid AABB blockers (locked gate). Mutates player x/vx on overlap.
+ */
+export function resolveSolidBlockers(p, blockers) {
+  if (!p || !blockers || !blockers.length) return;
+  const left = p.x - p.w / 2;
+  const right = p.x + p.w / 2;
+  const top = p.y - p.h;
+  const bot = p.y;
+  for (const b of blockers) {
+    if (right <= b.x || left >= b.x + b.w) continue;
+    if (bot <= b.y || top >= b.y + b.h) continue;
+    const overlapL = right - b.x;
+    const overlapR = b.x + b.w - left;
+    if (overlapL < overlapR) {
+      p.x -= overlapL;
+      if (p.vx > 0) p.vx = 0;
+    } else {
+      p.x += overlapR;
+      if (p.vx < 0) p.vx = 0;
+    }
+  }
 }
 
 /**

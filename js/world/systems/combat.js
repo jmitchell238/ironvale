@@ -40,7 +40,13 @@ export function applyAttackHits(session) {
   if (!result.hitAny) return;
   let anyKill = false;
   let anyBoss = false;
+  let anyReal = false;
   for (const hit of result.hits) {
+    if (hit.blocked) {
+      session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#c0c8d8', 6, 70);
+      continue;
+    }
+    anyReal = true;
     session.audio.hit();
     session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#f5e6c8', 10, 120);
     session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#c9a227', 4, 80);
@@ -50,6 +56,7 @@ export function applyAttackHits(session) {
       killEnemy(session, hit.enemy, hit.index);
     }
   }
+  if (!anyReal) return;
   session.shake = Math.max(session.shake, p.attackAir ? 1.8 : 1.25);
   if (anyBoss) applyHitstop(session, JUICE.hitstopBoss);
   else if (anyKill) applyHitstop(session, JUICE.hitstopHeavy);
@@ -81,7 +88,7 @@ export function killEnemy(session, e, idx) {
   session.burst(e.x, e.y - e.h / 2, '#f5e6c8', isBoss ? 16 : 6, 100);
   session.audio.explode(isBoss);
   session.shake = Math.max(session.shake, isBoss ? 3.4 : 1.4);
-  const n = isBoss ? 6 : e.type === 'ogre' ? 3 : 1;
+  const n = isBoss ? 6 : e.type === 'iron_warden' ? 5 : 1;
   for (let i = 0; i < n && session.coins.length < MAX_COINS; i++) {
     session.coins.push({
       x: e.x + rand(-10, 10), y: e.y - e.h / 2,

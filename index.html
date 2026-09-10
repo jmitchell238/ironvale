@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#1a1420" />
+  <meta name="theme-color" content="#1a2430" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Ironvale" />
-  <meta name="description" content="Medieval 2D platformer — run, jump, and slash through discrete stages of Ironvale." />
+  <meta name="description" content="Ironvale — small knight, a greater tomorrow. Climb, fight, and open the gate." />
   <title>Ironvale</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
@@ -17,24 +17,24 @@
 </head>
 <body>
   <div id="stage">
-    <canvas id="cv" width="390" height="700"></canvas>
+    <canvas id="cv" width="960" height="540"></canvas>
     <div id="versionTag"></div>
 
     <div class="screen" data-screen="menu" id="screenMenu">
       <div class="menu-card">
         <div class="logo-wrap">
-          <img class="logo-icon" src="assets/sprites/player/logo.png" alt="" width="96" height="108" />
+          <img class="logo-icon" src="assets/sprites/player/portrait.png" alt="" width="96" height="96" />
         </div>
         <h1><span class="c1">Iron</span><span class="c2">vale</span></h1>
-        <p class="tagline">Run · jump · slash · clear the realm</p>
-        <p class="credit-line">Knight art: GameArt2D free sprite · Ironvale world art</p>
+        <p class="tagline">Small knight. A greater tomorrow.</p>
+        <p class="credit-line">Explore · Climb · Fight · Discover · Build a brighter vale</p>
 
         <div class="stats">
           <div><span class="lbl">Best</span><strong id="statBest">0</strong></div>
           <div><span class="lbl">Hero Lv</span><strong id="statHeroLv">1</strong></div>
           <div><span class="lbl">Stage</span><strong id="statWave">0</strong></div>
         </div>
-        <p id="menuRpgLine" class="rpg-line">Points: 0 · XP banked between stages</p>
+        <p id="menuRpgLine" class="rpg-line">Train at the forge between stages</p>
 
         <button id="btnPlay" class="primary">▶  Campaign</button>
         <button id="btnNgPlus" class="secondary hidden">✦  New Game+</button>
@@ -43,11 +43,11 @@
 
         <div id="howPanel" class="how hidden">
           <ol>
-            <li><b>A D / stick</b> — run. <b>Space / JUMP</b> — jump; press again in air for a <b>double jump</b>.</li>
-            <li><b>S / ↓</b> — duck (smaller hitbox). <b>ATK</b> or J / F / Shift — sword slash.</li>
-            <li>Clear stages: fight to the <b>gate</b>, defeat the <b>boss</b>. Touch a <b>flag</b> for checkpoints.</li>
-            <li>Level-ups <b>bank points</b> mid-stage. Spend attributes <b>between stages</b>.</li>
-            <li>Beat stage 10 to unlock <b>New Game+</b> — harder foes, keep your hero.</li>
+            <li><b>A D / stick</b> — run. <b>W / ↑</b> on a ladder — climb. <b>Space / JUMP</b> — jump (again in air = double jump).</li>
+            <li><b>S / ↓</b> — duck. <b>ATK</b> or J / F / Shift — sword slash. Shield skeletons block from the front.</li>
+            <li>Explore the ruins, collect coins, touch a <b>flag</b> to checkpoint, open the <b>locked gate</b>.</li>
+            <li>Level-ups bank forge points mid-stage. Spend them <b>between stages</b>.</li>
+            <li>Clear all four biomes to face the <b>Iron Warden</b>. Then New Game+.</li>
           </ol>
         </div>
         <p id="versionMenu" class="ver"></p>
@@ -57,7 +57,7 @@
     <div class="screen hidden" data-screen="select" id="screenSelect">
       <div class="menu-card">
         <h2>Select Stage</h2>
-        <p class="tagline">Clear stages · defeat each end boss</p>
+        <p class="tagline">Four biomes · a brighter vale</p>
         <div id="levelList" class="level-list"></div>
         <button id="btnSelectBack" class="secondary">← Back</button>
         <p id="versionSelect" class="ver"></p>
@@ -65,11 +65,11 @@
     </div>
 
     <button id="btnPauseMenu" class="icon-btn play-chrome hidden" type="button" title="Menu">☰</button>
-    <p id="playHint" class="hint play-chrome hidden">Run · JUMP (×2 air) · ↓ duck · ATK · gate</p>
+    <p id="playHint" class="hint play-chrome hidden">Run · climb ladders · JUMP ×2 · ↓ duck · ATK · gate</p>
 
     <div class="screen hidden" data-screen="allocate" id="screenAllocate">
       <div class="menu-card allocate-card">
-        <h2 class="clear-title">Train Attributes</h2>
+        <h2 class="clear-title">Train at the Forge</h2>
         <p class="tagline">Spend points between stages</p>
         <p id="allocPoints" class="alloc-points">Unspent: 0</p>
         <div id="allocList" class="alloc-list"></div>
@@ -81,7 +81,7 @@
     <div class="screen hidden" data-screen="clear" id="screenClear">
       <div class="menu-card">
         <h2 class="clear-title">Stage Clear!</h2>
-        <p id="clearLevelName" class="tagline">Outer Vale</p>
+        <p id="clearLevelName" class="tagline">Forgegate Fields</p>
         <div class="stats tall">
           <div><span class="lbl">Score</span><strong id="clearScore">0</strong></div>
           <div><span class="lbl">Kills</span><strong id="clearKills">0</strong></div>

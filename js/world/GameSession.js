@@ -130,6 +130,10 @@ export class GameSession {
     /** Stage order (legacy field name `wave` kept for HUD/save compat). */
     this.wave = 1;
     this.cameraX = 0;
+    this.cameraY = 0;
+    this.ladders = [];
+    this.blockers = [];
+    this.coinsCollected = 0;
     this.time = 0;
     this.shake = 0;
     /** Hit-freeze timer (seconds remaining). */
@@ -426,10 +430,12 @@ export class GameSession {
     for (let i = this.coins.length - 1; i >= 0; i--) {
       const c = this.coins[i];
       c.life -= dt;
-      c.vy += 400 * dt;
-      c.vx *= 0.98;
-      c.x += c.vx * dt;
-      c.y += c.vy * dt;
+      if (!c.authored) {
+        c.vy += 400 * dt;
+        c.vx *= 0.98;
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
+      }
       for (const pl of this.platforms) {
         if (c.x >= pl.x && c.x <= pl.x + pl.w && c.y >= pl.y && c.y <= pl.y + 10 && c.vy > 0) {
           c.y = pl.y;
@@ -440,12 +446,13 @@ export class GameSession {
       if (dist(c.x, c.y, pcx, pcy) < 28) {
         this.addXp(c.xp);
         this.score += 3;
+        this.coinsCollected = (this.coinsCollected || 0) + 1;
         this.audio.coin();
         this.coins.splice(i, 1);
         if (this.screen !== 'play') return;
         continue;
       }
-      if (c.life <= 0) this.coins.splice(i, 1);
+      if (!c.authored && c.life <= 0) this.coins.splice(i, 1);
     }
   }
 

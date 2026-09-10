@@ -55,6 +55,6 @@ export function resizeCanvas(cv, logicalW, logicalH) {
   cv.height = Math.floor(logicalH * dpr);
   const ctx = cv.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
   return { ctx, scale, dpr };
 }
