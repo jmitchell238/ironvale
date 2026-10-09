@@ -6,7 +6,7 @@ A 2D pixel-art action platformer. You play an apprentice knight who runs, jumps,
 
 Play at https://jmitchell238.github.io/ironvale/
 
-You can install it as an app from the browser (Add to Home Screen on iPhone and iPad). It plays in landscape.
+You can install it as an app from the browser (Add to Home Screen on iPhone and iPad). It plays upright or sideways: held upright, the whole stage height shows with the touch controls underneath.
 
 ## Controls
 

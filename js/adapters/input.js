@@ -2,12 +2,12 @@
  * Adapter: keyboard + virtual stick input for the canvas stage.
  */
 
-import { W, H } from '../config/index.js';
+import { W, H, CONTROLS, PORTRAIT } from '../config/index.js';
 import { clamp, dist } from '../core/math.js';
 
 export const STICK_R = 42;
-export const JUMP_BTN = { x: W - 62, y: H - 50, r: 32 };
-export const ATK_BTN = { x: W - 140, y: H - 50, r: 28 };
+export const JUMP_BTN = CONTROLS.jump;
+export const ATK_BTN = CONTROLS.attack;
 
 export function createInput(stageEl, canvasEl, hooks) {
   const stick = {
@@ -30,7 +30,7 @@ export function createInput(stageEl, canvasEl, hooks) {
   }
 
   function hitBtn(sx, sy, btn) {
-    return dist(sx, sy, btn.x, btn.y) <= btn.r + 8;
+    return dist(sx, sy, btn.x, btn.y) <= btn.r + (PORTRAIT ? 22 : 8);
   }
 
   function resetStick() {
@@ -110,7 +110,10 @@ export function createInput(stageEl, canvasEl, hooks) {
     if (!hooks.isPlay || !hooks.isPlay()) return;
     if (hooks.ensureAudio) hooks.ensureAudio();
     const p = clientToStage(e.clientX, e.clientY);
-    if (hitBtn(p.x, p.y, ATK_BTN) || (p.x > W * 0.55 && p.y < H - 90 && p.y > H - 150)) {
+    const nearer = dist(p.x, p.y, ATK_BTN.x, ATK_BTN.y) < dist(p.x, p.y, JUMP_BTN.x, JUMP_BTN.y);
+    const rightPad = PORTRAIT && p.x > W * 0.5 && p.y > H - 320;
+    if (hitBtn(p.x, p.y, ATK_BTN) || (rightPad && nearer)
+      || (!PORTRAIT && p.x > W * 0.55 && p.y < H - 90 && p.y > H - 150)) {
       stick.attackDown = true;
       stick.attackId = e.pointerId;
       stick.attackQueued = true;
@@ -118,7 +121,7 @@ export function createInput(stageEl, canvasEl, hooks) {
       try { stageEl.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
-    if (hitBtn(p.x, p.y, JUMP_BTN) || (p.x > W * 0.62 && p.y >= H - 90)) {
+    if (hitBtn(p.x, p.y, JUMP_BTN) || rightPad || (!PORTRAIT && p.x > W * 0.62 && p.y >= H - 90)) {
       stick.jumpDown = true;
       stick.jumpId = e.pointerId;
       stick.jumpQueued = true;

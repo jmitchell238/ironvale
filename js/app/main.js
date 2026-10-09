@@ -3,7 +3,7 @@
  */
 
 import {
-  GAME_NAME, GAME_VERSION, GAME_VERSION_LABEL, W, H, ENEMIES,
+  GAME_NAME, GAME_VERSION, GAME_VERSION_LABEL, W, H, ENEMIES, setViewSize, viewSizeFor,
 } from '../config/index.js';
 import { resizeCanvas } from '../core/math.js';
 import { GameSession } from '../world/GameSession.js';
@@ -464,7 +464,17 @@ function registerSW() {
 }
 
 
-addEventListener('resize', () => { ({ ctx } = resizeCanvas(cv, W, H)); });
+/** Pick landscape or portrait view for the current screen, then size the canvas. */
+function fitView() {
+  const v = viewSizeFor(window.innerWidth, window.innerHeight);
+  setViewSize(v.w, v.h);
+  document.body.classList.toggle('portrait', v.h > v.w);
+  ({ ctx } = resizeCanvas(cv, W, H));
+}
+
+addEventListener('resize', fitView);
+addEventListener('orientationchange', () => setTimeout(fitView, 150));
+fitView();
 
 applyVersionLabels();
 updateMenuStats();

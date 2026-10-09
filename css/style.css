@@ -154,6 +154,7 @@ button.ghost {
   font-size: 1.1rem; line-height: 40px; z-index: 7;
 }
 
+body.portrait .hint { display: none; }
 .hint {
   position: absolute; left: 0; right: 0; bottom: 28px; margin: 0;
   text-align: center; font-size: 0.72rem;

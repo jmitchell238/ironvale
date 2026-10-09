@@ -4,7 +4,7 @@
  */
 
 import {
-  W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, HEART,
+  W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, HEART, CONTROLS, PORTRAIT,
   getEnemyMeleeCfg,
 } from '../config/index.js';
 import { clamp } from '../core/math.js';
@@ -404,7 +404,7 @@ export function drawEnemy(ctx, e, cam, t) {
   ctx.restore();
 
   const pixel = !!(entry && entry.meta && entry.meta.fw && e.drawScale === 2);
-  const sopts = { scale, flip: (e.facing || -1) > 0, ...spriteCam(cam), pixel };
+  const sopts = { scale, flip: (e.facing || -1) !== (e.artFaces || -1), ...spriteCam(cam), pixel };
   const ok = drawSprite(ctx, key, frame, e.x, e.y + (pixel ? 0 : 2), sopts);
   if (ok && (e.flash > 0 || e.slamState === 'windup')) {
     const a = e.flash > 0 ? 0.85 : 0.25 + 0.25 * Math.sin(t * 24);
@@ -541,61 +541,61 @@ export function drawHud(ctx, p, sc, best, opts = {}) {
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(28, 22, 16, 0.55)';
-  roundRectPath(ctx, W - 320, 12, 306, 40, 8); ctx.fill();
+  // Portrait: the banner gets its own row under the hearts
+  const bannerW = PORTRAIT ? W - 28 : 306;
+  const bannerY = PORTRAIT ? 84 : 12;
+  roundRectPath(ctx, W - 14 - bannerW, bannerY, bannerW, 40, 8); ctx.fill();
   ctx.fillStyle = '#f5e6c8';
   ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.fillText(stageLabel, W - 22, 24);
+  ctx.fillText(stageLabel, W - 22, bannerY + 12);
   ctx.fillStyle = '#c9b48a';
   ctx.font = '10px system-ui, sans-serif';
-  ctx.fillText(phaseLabel || 'Explore  ·  Climb  ·  Fight  ·  Discover', W - 22, 40);
+  ctx.fillText(phaseLabel || 'Explore  ·  Climb  ·  Fight  ·  Discover', W - 22, bannerY + 28);
   ctx.restore();
 }
 
 export function drawControls(ctx, stick) {
-  const cx = 70, cy = H - 52, br = 38;
+  const { stick: sc, jump: jb, attack: ab } = CONTROLS;
   ctx.save();
-  ctx.globalAlpha = stick.active ? 0.55 : 0.3;
+  if (PORTRAIT) {
+    const top = H - 330;
+    const g = ctx.createLinearGradient(0, top, 0, H);
+    g.addColorStop(0, 'rgba(12, 10, 8, 0)');
+    g.addColorStop(0.35, 'rgba(12, 10, 8, 0.45)');
+    g.addColorStop(1, 'rgba(12, 10, 8, 0.7)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, top, W, H - top);
+  }
+  ctx.globalAlpha = stick.active ? 0.6 : 0.35;
   ctx.fillStyle = 'rgba(30, 22, 16, 0.9)';
   ctx.strokeStyle = 'rgba(201, 162, 39, 0.55)';
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(cx, cy, br, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.globalAlpha = stick.active ? 0.9 : 0.4;
+  ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.globalAlpha = stick.active ? 0.9 : 0.45;
   ctx.fillStyle = '#c9a227';
+  const knob = sc.r * 0.36;
   ctx.beginPath();
-  ctx.arc(cx + stick.dx * (br - 14), cy + clamp(stick.dy, -1, 1) * (br - 14) * 0.3, 13, 0, Math.PI * 2);
+  ctx.arc(sc.x + stick.dx * (sc.r - knob), sc.y + clamp(stick.dy, -1, 1) * (sc.r - knob) * 0.5, knob, 0, Math.PI * 2);
   ctx.fill();
-  // Stick hint: ↓ duck
   ctx.globalAlpha = 0.5;
   ctx.fillStyle = '#a89070';
-  ctx.font = '9px system-ui';
-  ctx.textAlign = 'center';
-  ctx.fillText('↓ duck', cx, cy + br + 12);
-
-  const jx = W - 62, jy = H - 50;
-  ctx.globalAlpha = stick.jumpDown ? 0.75 : 0.35;
-  ctx.fillStyle = 'rgba(40, 28, 18, 0.9)';
-  ctx.strokeStyle = 'rgba(201, 162, 39, 0.7)';
-  ctx.beginPath(); ctx.arc(jx, jy, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#f5e6c8';
-  ctx.font = 'bold 10px system-ui';
+  ctx.font = `${Math.round(sc.r * 0.24)}px system-ui`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.globalAlpha = 0.95;
-  ctx.fillText('JUMP', jx, jy);
-  ctx.globalAlpha = 0.45;
-  ctx.font = '8px system-ui';
-  ctx.fillStyle = '#a89070';
-  ctx.fillText('×2 air', jx, jy + 32);
+  ctx.fillText('↓ duck · ↑ climb', sc.x, sc.y + sc.r + 12);
 
-  const ax = W - 140, ay = H - 50;
-  ctx.globalAlpha = stick.attackDown ? 0.8 : 0.38;
-  ctx.fillStyle = 'rgba(50, 20, 20, 0.9)';
-  ctx.strokeStyle = 'rgba(231, 76, 60, 0.7)';
-  ctx.beginPath(); ctx.arc(ax, ay, 26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#f5c6c0';
-  ctx.globalAlpha = 0.95;
-  ctx.font = 'bold 10px system-ui';
-  ctx.fillText('ATK', ax, ay);
+  const button = (b, down, fill, stroke, label, textCol) => {
+    ctx.globalAlpha = down ? 0.8 : 0.4;
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = textCol;
+    ctx.font = `bold ${Math.round(b.r * 0.36)}px system-ui`;
+    ctx.fillText(label, b.x, b.y);
+  };
+  button(jb, stick.jumpDown, 'rgba(40, 28, 18, 0.9)', 'rgba(201, 162, 39, 0.7)', 'JUMP', '#f5e6c8');
+  button(ab, stick.attackDown, 'rgba(50, 20, 20, 0.9)', 'rgba(231, 76, 60, 0.7)', 'ATK', '#f5c6c0');
   ctx.restore();
 }
 

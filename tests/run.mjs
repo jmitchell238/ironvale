@@ -878,6 +878,47 @@ section('pits, hearts and cliff knock-offs');
   assertEq(s.kills, k + 1, 'enemy knocked into the sea counts as a kill');
 }
 
+section('portrait and landscape views');
+{
+  const { viewSizeFor, setViewSize, CONTROLS } = config;
+  const port = viewSizeFor(390, 844);
+  assertEq(port.w, 540, 'portrait view is 540 wide');
+  assert(port.h > 1000, 'portrait view uses the tall screen');
+  assertEq(viewSizeFor(844, 390).w, 960, 'landscape view');
+  setViewSize(port.w, port.h);
+  assertEq(config.W, 540, 'W follows the view');
+  assert(config.PORTRAIT, 'portrait flag');
+  assert(CONTROLS.jump.y > port.h - 300 && CONTROLS.jump.x < 540, 'buttons sit in the bottom of the portrait view');
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  for (let i = 0; i < 30; i++) s.update(1 / 60, { x: 1, y: 0, jump: false, attack: false });
+  const cam = s.getCameraBounds();
+  assert(s.cameraX >= cam.minX && s.cameraX <= cam.maxX, 'camera stays in bounds in portrait');
+  setViewSize(960, 540);
+  assertEq(config.W, 960, 'back to landscape W');
+  assertEq(config.H, 540, 'back to landscape H');
+  assert(!config.PORTRAIT, 'landscape flag');
+}
+
+section('enemies face the way they move; coins touch the body');
+{
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  const ghost = s.spawnEnemy('bat', { x: s.player.x + 400, y: s.player.y - 100 });
+  const wolf = s.spawnEnemy('wolf', { x: s.player.x + 400, y: s.player.y });
+  const skel = s.spawnEnemy('goblin', { x: s.player.x + 400, y: s.player.y });
+  assertEq(ghost.artFaces, 1, 'ghost art looks right');
+  assertEq(wolf.artFaces, 1, 'wolf art looks right');
+  assertEq(skel.artFaces, -1, 'skeleton art looks left');
+
+  const p = s.player;
+  s.coins.length = 0;
+  s.coins.push({ x: p.x + p.w / 2 + 10, y: p.y - p.h + 6, vx: 0, vy: 0, r: 8, xp: 1, life: 999, authored: true });
+  const before = s.coinsCollected;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(s.coinsCollected, before + 1, 'coin by the shoulder is collected');
+}
+
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failed) {
   for (const f of failures) console.error(' -', f);

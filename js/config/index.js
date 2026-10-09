@@ -8,18 +8,31 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '2.1.001';
+export const GAME_VERSION = '2.2.000';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 export const GAME_TAGLINE = 'Small knight. A greater tomorrow.';
 
-export const W = 960;
-export const H = 540;
+/**
+ * Logical view size. Landscape is 960×540; on a portrait screen the view is
+ * 540 wide and as tall as the screen's shape allows (see setViewSize).
+ * These are live bindings: modules that import W/H see the current size.
+ */
+export let W = 960;
+export let H = 540;
+export let PORTRAIT = false;
 
 /** Screen-space chrome insets (HUD / touch). World geometry uses level bounds. */
 export const PLAY = { left: 8, right: W - 8, top: 52, bottom: H - 64 };
-export const PLAY_W = PLAY.right - PLAY.left;
-export const PLAY_H = PLAY.bottom - PLAY.top;
+export let PLAY_W = PLAY.right - PLAY.left;
+export let PLAY_H = PLAY.bottom - PLAY.top;
+
+/** Touch control positions in view space (updated by setViewSize). */
+export const CONTROLS = {
+  stick: { x: 70, y: H - 52, r: 38 },
+  jump: { x: W - 62, y: H - 50, r: 30 },
+  attack: { x: W - 140, y: H - 50, r: 28 },
+};
 /** Default world-space floor (lowest Forgegate terrace). Not screen-space. */
 export const GROUND_Y = 1100;
 
@@ -101,6 +114,40 @@ export const CAM = {
   lerpY: 3.2,
 };
 
+/**
+ * Switch the logical view. Portrait keeps a 540-wide view and fills the
+ * screen's height; the lower part holds the touch controls.
+ */
+export function setViewSize(w, h) {
+  W = Math.round(w);
+  H = Math.round(h);
+  PORTRAIT = H > W;
+  PLAY.right = W - 8;
+  PLAY.bottom = H - 64;
+  PLAY_W = PLAY.right - PLAY.left;
+  PLAY_H = PLAY.bottom - PLAY.top;
+  CAM.focusX = W * (PORTRAIT ? 0.36 : 0.34);
+  CAM.focusY = H * (PORTRAIT ? 0.42 : 0.64);
+  if (PORTRAIT) {
+    Object.assign(CONTROLS.stick, { x: 110, y: H - 150, r: 64 });
+    Object.assign(CONTROLS.jump, { x: W - 84, y: H - 170, r: 52 });
+    Object.assign(CONTROLS.attack, { x: W - 200, y: H - 100, r: 48 });
+  } else {
+    Object.assign(CONTROLS.stick, { x: 70, y: H - 52, r: 38 });
+    Object.assign(CONTROLS.jump, { x: W - 62, y: H - 50, r: 30 });
+    Object.assign(CONTROLS.attack, { x: W - 140, y: H - 50, r: 28 });
+  }
+}
+
+/** View size for a screen of cssW×cssH pixels. */
+export function viewSizeFor(cssW, cssH) {
+  if (cssH > cssW) {
+    const h = Math.round(540 * Math.min(2.4, Math.max(1.4, cssH / cssW)));
+    return { w: 540, h };
+  }
+  return { w: 960, h: 540 };
+}
+
 export const MAX_ENEMIES = 40;
 export const MAX_COINS = 80;
 export const MAX_PARTICLES = 160;
@@ -150,7 +197,7 @@ export const ENEMIES = {
   bat: {
     w: 34, h: 70, hp: 16, speed: 66, score: 10, xp: 2,
     color: '#7a5aa8', damage: 10, skin: 'ghost', drawScale: 2,
-    fly: true, label: 'Ghost',
+    fly: true, label: 'Ghost', artFaces: 1,
   },
   /** Armoured skeleton; blocks the sword from the front until it swings. */
   shield_skeleton: {
@@ -162,7 +209,7 @@ export const ENEMIES = {
   wolf: {
     w: 64, h: 36, hp: 18, speed: 175, score: 14, xp: 3,
     color: '#d8dce0', damage: 12, skin: 'wolf', drawScale: 2,
-    aggroX: 340, label: 'Wolf',
+    aggroX: 340, label: 'Wolf', artFaces: 1,
   },
   /** Campaign finale — Iron Caverns. */
   iron_warden: {

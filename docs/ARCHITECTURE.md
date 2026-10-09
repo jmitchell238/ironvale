@@ -1,6 +1,6 @@
 # Architecture
 
-Ironvale is plain ES modules with no build step. `index.html` loads `js/app/main.js`, which imports everything else. The game draws to a 960×540 canvas that's letterboxed to fit the screen.
+Ironvale is plain ES modules with no build step. `index.html` loads `js/app/main.js`, which imports everything else. The game draws to a 960×540 canvas in landscape, or a 540-wide canvas as tall as the screen in portrait (`setViewSize` in `js/config/index.js`; `W`, `H` and `CONTROLS` update when the phone turns). Either way it is letterboxed to fit.
 
 ## Layers
 

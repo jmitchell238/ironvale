@@ -127,6 +127,8 @@ export function spawnEnemy(session, type, opts = {}) {
     slamHitDone: false,
     spawnGrace: grace,
     /** Skeletons climb out of the ground before they act. */
+    /** Which way the sprite art looks: -1 left, 1 right. */
+    artFaces: def.artFaces || -1,
     rise: def.rises && !flying ? 0.6 : 0,
     aiCfg: def.aggroX ? { ...ENEMY_AI, aggroX: def.aggroX } : ENEMY_AI,
   };

@@ -453,8 +453,6 @@ export class GameSession {
   }
 
   _updateCoins(dt) {
-    const pcx = playerCx(this.player);
-    const pcy = playerCy(this.player);
     for (let i = this.coins.length - 1; i >= 0; i--) {
       const c = this.coins[i];
       c.life -= dt;
@@ -471,7 +469,7 @@ export class GameSession {
           c.vx *= 0.7;
         }
       }
-      if (dist(c.x, c.y, pcx, pcy) < 28) {
+      if (this._touchesBody(c.x, c.y, 16)) {
         this.addXp(c.xp);
         this.score += 3;
         this.coinsCollected = (this.coinsCollected || 0) + 1;
@@ -482,6 +480,13 @@ export class GameSession {
       }
       if (!c.authored && c.life <= 0) this.coins.splice(i, 1);
     }
+  }
+
+  /** Point within `pad` px of the knight's body box (the sprite is wider than the body). */
+  _touchesBody(x, y, pad) {
+    const p = this.player;
+    return x > p.x - p.w / 2 - pad && x < p.x + p.w / 2 + pad
+      && y > p.y - p.h - pad && y < p.y + pad;
   }
 
   _updatePickups() {
