@@ -80,7 +80,7 @@ section('PWA shell + architecture layout');
   assert(exists('js/domain/levels.js'), 'domain/levels');
   assert(exists('js/domain/rpg.js'), 'domain/rpg');
   assert(exists('js/adapters/render.js'), 'adapters/render');
-  assert(exists('ARCHITECTURE.md'), 'ARCHITECTURE.md');
+  assert(exists('docs/ARCHITECTURE.md'), 'docs/ARCHITECTURE.md');
   const html = read('index.html');
   assert(html.includes('type="module"'), 'ES module entry');
   assert(html.includes('js/app/main.js'), 'entry is app/main');
