@@ -6,6 +6,8 @@ A 2D action platformer. You play an apprentice knight who explores, climbs and f
 
 Play at https://jmitchell238.github.io/ironvale/
 
+You can install it as an app from the browser (Add to Home Screen on iPhone and iPad).
+
 ## Controls
 
 | Input | Action |
@@ -27,26 +29,6 @@ Play at https://jmitchell238.github.io/ironvale/
 
 Clear each stage's fights to open its end gate. Flags are checkpoints. Leveling up earns forge points, which you spend at the forge between stages.
 
-## Code
+## Development
 
-Layered ES modules, described in [ARCHITECTURE.md](./ARCHITECTURE.md):
-
-```
-app → adapters → world/GameSession + systems → domain → config/core
-```
-
-## Tests
-
-```bash
-npm test
-```
-
-## Running locally
-
-```bash
-npm start
-```
-
-This serves the folder on http://localhost:8080. ES modules don't load from `file://`, so opening `index.html` directly won't work.
-
-The game draws to a 960×540 landscape canvas, letterboxed to fit the screen.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for running it locally, tests and versioning, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is organized.
