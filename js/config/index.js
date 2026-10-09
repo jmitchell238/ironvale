@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '2.1.000';
+export const GAME_VERSION = '2.1.001';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 export const GAME_TAGLINE = 'Small knight. A greater tomorrow.';

@@ -116,6 +116,27 @@
     </div>
   </div>
 
-  <script type="module" src="js/app/main.js"></script>
+  <script type="module">
+    // A browser can hold some game files from the previous release in its cache
+    // and fetch the rest fresh; mixed versions fail to link. Refresh and retry once.
+    const RETRY = 'ironvale-boot-retry';
+    import('./js/app/main.js').then(() => sessionStorage.removeItem(RETRY), async err => {
+      console.warn('[boot]', err);
+      const line = document.getElementById('menuRpgLine');
+      if (sessionStorage.getItem(RETRY)) {
+        sessionStorage.removeItem(RETRY);
+        if (line) line.textContent = 'Could not load the game. Close it and open it again.';
+        return;
+      }
+      sessionStorage.setItem(RETRY, '1');
+      if (line) line.textContent = 'Updating…';
+      try {
+        const sw = await (await fetch('sw.js', { cache: 'reload' })).text();
+        const urls = ['sw.js', ...(sw.match(/'\.\/(?:js|css)\/[^']+'/g) || []).map(q => q.slice(1, -1))];
+        await Promise.all(urls.map(u => fetch(u, { cache: 'reload' }).catch(() => {})));
+      } catch (e) { console.warn('[boot]', e); }
+      location.reload();
+    });
+  </script>
 </body>
 </html>
