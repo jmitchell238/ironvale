@@ -1,10 +1,10 @@
 # Ironvale
 
-**Small knight. A greater tomorrow.**
+Small knight. A greater tomorrow.
 
-A 2D action-platformer about an apprentice knight who explores, climbs, fights, and opens the path to a brighter vale.
+A 2D action platformer. You play an apprentice knight who explores, climbs and fights through four stages to reach the Iron Warden.
 
-**Play:** https://jmitchell238.github.io/ironvale/
+Play at https://jmitchell238.github.io/ironvale/
 
 ## Controls
 
@@ -20,22 +20,20 @@ A 2D action-platformer about an apprentice knight who explores, climbs, fights, 
 
 ## Campaign
 
-1. **Forgegate Fields** — teaching stage. Ruins, ladders, goblins, bats, shield skeletons, locked gate.
-2. **Forest Ramparts** — nature reclaims the walls.
-3. **Forge Ruins** — old machines, new paths.
-4. **Iron Caverns** — campaign boss: **The Iron Warden**.
+1. Forgegate Fields: the tutorial stage, with ruins, ladders, goblins, bats, shield skeletons and a locked gate
+2. Forest Ramparts
+3. Forge Ruins
+4. Iron Caverns, ending with the boss, the Iron Warden
 
-Clear encounters to unlock the end gate. Touch a flag for checkpoints. Level-ups bank forge points mid-stage; spend them between biomes.
+Clear each stage's fights to open its end gate. Flags are checkpoints. Leveling up earns forge points, which you spend at the forge between stages.
 
-## Architecture
+## Code
 
-Layered ES modules — see **[ARCHITECTURE.md](./ARCHITECTURE.md)**.
+Layered ES modules, described in [ARCHITECTURE.md](./ARCHITECTURE.md):
 
 ```
 app → adapters → world/GameSession + systems → domain → config/core
 ```
-
-Sword length, body size, and draw scale are separate config axes.
 
 ## Tests
 
@@ -43,10 +41,12 @@ Sword length, body size, and draw scale are separate config axes.
 npm test
 ```
 
-## Local
+## Running locally
 
 ```bash
 npm start
 ```
 
-Requires HTTP (ES modules). Landscape 960×540 canvas, letterboxed.
+This serves the folder on http://localhost:8080. ES modules don't load from `file://`, so opening `index.html` directly won't work.
+
+The game draws to a 960×540 landscape canvas, letterboxed to fit the screen.
