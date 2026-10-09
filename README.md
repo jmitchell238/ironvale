@@ -2,7 +2,7 @@
 
 Small knight. A greater tomorrow.
 
-A 2D action platformer. You play an apprentice knight who runs, climbs ladders and fights goblins, bats and shield skeletons on the way to the Iron Warden. Between stages you train at the forge to get stronger.
+A 2D pixel-art action platformer. You play an apprentice knight who runs, jumps, climbs and cuts through skeletons, ghosts and wolves on the way to the Iron Warden. Between stages you train at the forge to get stronger.
 
 Play at https://jmitchell238.github.io/ironvale/
 
@@ -16,16 +16,19 @@ You can install it as an app from the browser (Add to Home Screen on iPhone and 
 | Climb a ladder | W S / ↑ ↓ | Stick up or down |
 | Jump (press again in the air to double jump) | Space / W / ↑ | JUMP |
 | Duck | S / ↓ | Stick down |
-| Sword | J / K / F / Shift | ATK |
+| Sword (keep pressing to chain hits) | J / K / F / Shift | ATK |
 | Pick a stat at the forge | 1–6 | Tap |
 | Menu | Esc | ☰ |
 
 ## How it plays
 
-Each stage is a side-scrolling level with platforms and ladders. Walking past certain points starts a fight. The gate at the end of the stage stays shut until every fight in the stage is won. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage.
+Each stage is a side-scrolling level with cliffs, ladders, bridges and floating islands. Enemies appear as you go; skeletons climb out of the ground. The gate at the end stays shut until every enemy in the stage is beaten. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage. Falling into the sea costs a heart and puts you back on the last solid ground.
 
-- Goblins and shield skeletons wind up before they swing, so you can see attacks coming. Shield skeletons block hits from the front.
-- Bats hurt you if they touch you.
+- The sword chains: keep pressing and the third hit of a chain does extra damage. A hit stops an enemy's wind-up.
+- Skeletons wind up before they swing, so you can see attacks coming.
+- Bone Guards block hits from the front. Bait their swing or get behind them.
+- Ghosts float through walls and hurt you if they touch you. Wolves are fast and fragile.
+- Hearts hidden around the stage heal you.
 - The Iron Warden, at the end of the last stage, has a telegraphed ground slam.
 
 ## Getting stronger
@@ -52,11 +55,11 @@ After you beat the Iron Warden, New Game+ appears on the menu. It keeps your kni
 3. Forge Ruins
 4. Iron Caverns, with the Iron Warden
 
-Forgegate Fields is the only stage with a finished layout so far. The other three use a placeholder layout; see [docs/ROADMAP.md](docs/ROADMAP.md).
+The campaign goes from bright to dark: sunny sea cliffs, then swamp and forest, a gothic town and church, and finally a dark castle. Forgegate Fields is finished. The other three still use a placeholder layout; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Credits
 
-The knight, enemies, tiles and backgrounds were made from Ironvale concept art. Details are in [assets/CREDITS.md](assets/CREDITS.md).
+Pixel art by Luis Zuno ([@ansimuz](https://www.patreon.com/ansimuz)): Magic Cliffs Environment (CC-BY 3.0) and the Gothicvania packs (public domain). Details are in [assets/CREDITS.md](assets/CREDITS.md).
 
 ## License
 

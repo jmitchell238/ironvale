@@ -43,13 +43,19 @@ export function applyAttackHits(session) {
   let anyReal = false;
   for (const hit of result.hits) {
     if (hit.blocked) {
-      session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#c0c8d8', 6, 70);
+      session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#c0c8d8', 8, 110);
+      session.popup(hit.enemy.x, hit.enemy.y - hit.enemy.h - 6, 'BLOCK', '#a8c0e0');
+      p.vx = -(hit.box?.dir || 1) * 140;
       continue;
     }
     anyReal = true;
     session.audio.hit();
-    session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#f5e6c8', 10, 120);
-    session.burst(hit.enemy.x, hit.enemy.y - hit.enemy.h / 2, '#c9a227', 4, 80);
+    const hy = hit.enemy.y - hit.enemy.h / 2;
+    session.burst(hit.enemy.x, hy, '#ffffff', hit.finisher ? 14 : 8, hit.finisher ? 190 : 130);
+    session.burst(hit.enemy.x, hy, '#ffd36a', hit.finisher ? 8 : 4, 90);
+    session.spark(hit.enemy.x - (hit.box?.dir || 1) * hit.enemy.w * 0.3, hy, hit.box?.dir || 1);
+    session.popup(hit.enemy.x, hit.enemy.y - hit.enemy.h - 6, String(Math.round(hit.damage)),
+      hit.finisher ? '#ffd36a' : '#ffffff');
     if (hit.killed) {
       anyKill = true;
       if (enemyIsBoss(hit.enemy)) anyBoss = true;
@@ -57,9 +63,10 @@ export function applyAttackHits(session) {
     }
   }
   if (!anyReal) return;
-  session.shake = Math.max(session.shake, p.attackAir ? 1.8 : 1.25);
+  const finisher = result.hits.some(h => h.finisher && !h.blocked);
+  session.shake = Math.max(session.shake, finisher ? 2.4 : (p.attackAir ? 1.8 : 1.25));
   if (anyBoss) applyHitstop(session, JUICE.hitstopBoss);
-  else if (anyKill) applyHitstop(session, JUICE.hitstopHeavy);
+  else if (anyKill || finisher) applyHitstop(session, JUICE.hitstopHeavy);
   else applyHitstop(session, JUICE.hitstopLight);
 }
 
@@ -68,10 +75,11 @@ export function applyAttackHits(session) {
  */
 export function doAttack(session) {
   const p = session.player;
-  if (!p) return;
-  if (!beginMeleeAttack(p, session.stats, PLAYER_SWORD)) return;
+  if (!p) return false;
+  if (!beginMeleeAttack(p, session.stats, PLAYER_SWORD)) return false;
   session.audio.slash();
   applyAttackHits(session);
+  return true;
 }
 
 /**
@@ -86,6 +94,7 @@ export function killEnemy(session, e, idx) {
   const burstN = isBoss ? JUICE.bossKillBurstN : JUICE.killBurstN;
   session.burst(e.x, e.y - e.h / 2, e.color, burstN, isBoss ? 180 : 150);
   session.burst(e.x, e.y - e.h / 2, '#f5e6c8', isBoss ? 16 : 6, 100);
+  session.effect('fx/death', e.x, e.y);
   session.audio.explode(isBoss);
   session.shake = Math.max(session.shake, isBoss ? 3.4 : 1.4);
   const n = isBoss ? 6 : e.type === 'iron_warden' ? 5 : 1;

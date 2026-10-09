@@ -28,6 +28,18 @@ This repository is publicly visible on GitHub. That does NOT grant any license
 to use, copy, modify, or distribute the Game, beyond the limited viewing and
 forking within GitHub that GitHub's Terms of Service require.
 
+THIRD-PARTY MATERIAL
+
+The pixel art in assets/gv/ is by Luis Zuno (@ansimuz) and is not covered by
+the restrictions above. It keeps its own license:
+
+  - Magic Cliffs Environment: Creative Commons Attribution 3.0
+    (https://creativecommons.org/licenses/by/3.0/). Credit: Luis Zuno (@ansimuz).
+  - Gothicvania Patreon's Collection and Gothicvania Cemetery: public domain.
+
+The original license files are in assets/gv/licenses/ and the full list is in
+assets/CREDITS.md.
+
 NO WARRANTY
 
 THE GAME IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,

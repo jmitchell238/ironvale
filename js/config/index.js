@@ -8,7 +8,7 @@
  *   PLAYER_DRAW  — presentation only
  */
 
-export const GAME_VERSION = '2.0.200';
+export const GAME_VERSION = '2.1.000';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Ironvale';
 export const GAME_TAGLINE = 'Small knight. A greater tomorrow.';
@@ -32,7 +32,7 @@ export const CLIMB = {
   snapSpeed: 260,
 };
 
-export const PLAYER_BODY = { w: 28, h: 48, duckH: 28 };
+export const PLAYER_BODY = { w: 26, h: 70, duckH: 46 };
 
 export const PLAYER_MOVE = {
   runSpeed: 210,
@@ -65,18 +65,26 @@ export const SPAWN_SAFE = {
 };
 
 export const PLAYER_SWORD = {
-  attackTime: 0.34,
-  attackCooldown: 0.36,
-  attackRange: 78,
-  attackHeight: 40,
+  attackTime: 0.26,
+  attackCooldown: 0.28,
+  /** A press during a swing starts the next one as soon as it can. */
+  attackBuffer: 0.3,
+  /** Swings chained inside this window build a combo; the third hits harder. */
+  comboWindow: 0.45,
+  comboFinisherMul: 1.6,
+  /** Ground swings plant the feet. */
+  groundAttackMoveMul: 0.3,
+  attackRange: 84,
+  attackHeight: 52,
   attackOriginX: 0.35,
   attackDamage: 20,
   attackKnockback: 220,
-  airAttackRange: 70,
-  airAttackHeight: 48,
+  airAttackRange: 78,
+  airAttackHeight: 64,
 };
 
-export const PLAYER_DRAW = { drawScale: 1.28 };
+/** Pixel art is drawn at a whole-number scale so it stays crisp. */
+export const PLAYER_DRAW = { drawScale: 2 };
 
 /** Convenience merge for systems that need several axes. */
 export const PLAYER = {
@@ -132,23 +140,29 @@ export const JUMP_SAFE = {
 export const MAX_PLATFORMS = 64;
 
 export const ENEMIES = {
-  /** Fast pack melee — Forgegate Fields. */
+  /** Shambling skeleton — basic melee. */
   goblin: {
-    w: 28, h: 42, hp: 26, speed: 78, score: 16, xp: 3,
-    color: '#3d8b3d', damage: 14, skin: 'goblin', frames: 4, fw: 48, fh: 56,
-    hasMelee: true,
+    w: 34, h: 82, hp: 30, speed: 64, score: 16, xp: 3,
+    color: '#b8a088', damage: 14, skin: 'skeleton', drawScale: 2,
+    hasMelee: true, rises: true, label: 'Skeleton',
   },
-  /** Flying contact fodder. */
+  /** Lantern ghost — floats through walls, contact damage. */
   bat: {
-    w: 28, h: 22, hp: 14, speed: 70, score: 10, xp: 2,
-    color: '#5a3a7a', damage: 10, skin: 'bat', frames: 4, fw: 48, fh: 40,
-    fly: true,
+    w: 34, h: 70, hp: 16, speed: 66, score: 10, xp: 2,
+    color: '#7a5aa8', damage: 10, skin: 'ghost', drawScale: 2,
+    fly: true, label: 'Ghost',
   },
-  /** Patrols ruins; blocks sword from the front until it swings. */
+  /** Armoured skeleton; blocks the sword from the front until it swings. */
   shield_skeleton: {
-    w: 28, h: 46, hp: 34, speed: 48, score: 20, xp: 4,
-    color: '#c8c0a8', damage: 14, skin: 'skeleton', frames: 4, fw: 48, fh: 56,
-    hasMelee: true, blockFront: true,
+    w: 34, h: 82, hp: 40, speed: 46, score: 20, xp: 4,
+    color: '#c06060', damage: 16, skin: 'skeleton_clothed', drawScale: 2,
+    hasMelee: true, blockFront: true, rises: true, label: 'Bone Guard',
+  },
+  /** Fast runner, low health, contact damage. */
+  wolf: {
+    w: 64, h: 36, hp: 18, speed: 175, score: 14, xp: 3,
+    color: '#d8dce0', damage: 12, skin: 'wolf', drawScale: 2,
+    aggroX: 340, label: 'Wolf',
   },
   /** Campaign finale — Iron Caverns. */
   iron_warden: {
@@ -157,6 +171,11 @@ export const ENEMIES = {
     isBoss: true, drawScale: 1.35, label: 'The Iron Warden',
     hasMelee: true, hasSlam: true,
   },
+};
+
+/** Pickups placed in levels. */
+export const PICKUPS = {
+  heart: { heal: 25, r: 18 },
 };
 
 /** New Game+ enemy scaling per cycle. */
@@ -185,11 +204,11 @@ export const JUICE = {
  */
 export const ENEMY_MELEE = {
   goblin: {
-    range: 46, windup: 0.28, active: 0.12, recover: 0.34, cooldown: 0.78,
+    range: 58, windup: 0.42, active: 0.12, recover: 0.34, cooldown: 0.78,
     damageMul: 1.0, knockback: 170, aggroY: 48,
   },
   shield_skeleton: {
-    range: 50, windup: 0.36, active: 0.14, recover: 0.42, cooldown: 0.90,
+    range: 60, windup: 0.48, active: 0.14, recover: 0.42, cooldown: 0.90,
     damageMul: 1.05, knockback: 180, aggroY: 52,
   },
   iron_warden: {

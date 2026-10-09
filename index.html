@@ -23,7 +23,7 @@
     <div class="screen" data-screen="menu" id="screenMenu">
       <div class="menu-card">
         <div class="logo-wrap">
-          <img class="logo-icon" src="assets/sprites/player/portrait.png" alt="" width="96" height="96" />
+          <img class="logo-icon" src="assets/gv/hero/portrait.png" alt="" width="96" height="96" />
         </div>
         <h1><span class="c1">Iron</span><span class="c2">vale</span></h1>
         <p class="tagline">Small knight. A greater tomorrow.</p>
@@ -44,12 +44,14 @@
         <div id="howPanel" class="how hidden">
           <ol>
             <li><b>A D / stick</b> — run. <b>W / ↑</b> on a ladder — climb. <b>Space / JUMP</b> — jump (again in air = double jump).</li>
-            <li><b>S / ↓</b> — duck. <b>ATK</b> or J / F / Shift — sword slash. Shield skeletons block from the front.</li>
-            <li>Explore the ruins, collect coins, touch a <b>flag</b> to checkpoint, open the <b>locked gate</b>.</li>
+            <li><b>ATK</b> or J / F / Shift — sword. Keep swinging: the third hit of a chain hits hardest. A hit stops an enemy's wind-up. <b>S / ↓</b> — duck (you can slash low).</li>
+            <li>Bone Guards block from the front, so bait their swing or get behind them. Ghosts drift through walls. Wolves are fast but fragile.</li>
+            <li>Collect coins, grab hearts to heal, pass a <b>flag</b> to checkpoint. Beat every foe to open the <b>gate</b>.</li>
             <li>Level-ups bank forge points mid-stage. Spend them <b>between stages</b>.</li>
             <li>Clear all four biomes to face the <b>Iron Warden</b>. Then New Game+.</li>
           </ol>
         </div>
+        <p class="art-credit">Pixel art by Luis Zuno (@ansimuz) · CC-BY 3.0 / public domain</p>
         <p id="versionMenu" class="ver"></p>
       </div>
     </div>
@@ -65,7 +67,7 @@
     </div>
 
     <button id="btnPauseMenu" class="icon-btn play-chrome hidden" type="button" title="Menu">☰</button>
-    <p id="playHint" class="hint play-chrome hidden">Run · climb ladders · JUMP ×2 · ↓ duck · ATK · gate</p>
+    <p id="playHint" class="hint play-chrome hidden">Run · JUMP ×2 · ATK ×3 combo · ↓ duck · ↑ ladders</p>
 
     <div class="screen hidden" data-screen="allocate" id="screenAllocate">
       <div class="menu-card allocate-card">

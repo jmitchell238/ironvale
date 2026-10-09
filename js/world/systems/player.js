@@ -35,6 +35,7 @@ export function updatePlayer(session, dt, input) {
     worldMaxY: bounds.maxY,
     respawnX: cp ? cp.x : session.level?.spawn?.x,
     respawnY: cp ? cp.y : session.level?.spawn?.y,
+    preferSafeRespawn: !!session.level?.tiles,
     onJump: () => session.audio.jump(),
     onFellOff: () => hurtPlayer(session, HEART),
   });
@@ -54,6 +55,7 @@ export function hurtPlayer(session, dmg) {
   if (hasMeleePriority(p, session.stats, PLAYER_SWORD)) return;
   p.hp -= dmg;
   p.inv = PLAYER_MOVE.invuln;
+  p.hurtT = 0.3;
   session.shake = Math.max(session.shake, 2);
   session.audio.hurt();
   session.burst(playerCx(p), playerCy(p), '#e74c3c', 8, 100);

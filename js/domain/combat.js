@@ -46,6 +46,9 @@ export function enemyOverlapsBox(enemy, box) {
 export function beginMeleeAttack(player, stats, swordCfg) {
   if (!player || !swordCfg) return false;
   if (player.attackCd > 0 || player.attacking) return false;
+  const chain = (player.comboT || 0) > 0;
+  player.combo = chain ? ((player.combo || 0) + 1) % 3 : 0;
+  player.comboT = combatAttackCooldown(swordCfg, stats) + (swordCfg.comboWindow || 0);
   player.attacking = true;
   player.attackAir = !player.onGround;
   player.attackHitDone = false;
@@ -57,6 +60,7 @@ export function beginMeleeAttack(player, stats, swordCfg) {
 export function tickMeleeAttack(player, dt, swordCfg, stats) {
   if (!player) return false;
   if (player.attackCd > 0) player.attackCd = Math.max(0, player.attackCd - dt);
+  if (player.comboT > 0) player.comboT = Math.max(0, player.comboT - dt);
   if (!player.attacking) return false;
   player.attackT -= dt;
   if (player.attackT <= 0) {
@@ -81,8 +85,11 @@ export function resolveMeleeHits(player, enemies, stats, swordCfg) {
   const box = getAttackBox(player, st, swordCfg);
   if (!box) return empty;
 
-  const kb = (swordCfg.attackKnockback != null ? swordCfg.attackKnockback : 200) * (player.attackAir ? 0.75 : 1);
-  const damage = st.damage != null ? st.damage : swordCfg.attackDamage;
+  const finisher = isComboFinisher(player);
+  const mul = finisher ? (swordCfg.comboFinisherMul || 1) : 1;
+  const kb = (swordCfg.attackKnockback != null ? swordCfg.attackKnockback : 200)
+    * (player.attackAir ? 0.75 : 1) * mul;
+  const damage = (st.damage != null ? st.damage : swordCfg.attackDamage) * mul;
   const hits = [];
 
   for (let i = enemies.length - 1; i >= 0; i--) {
@@ -94,14 +101,25 @@ export function resolveMeleeHits(player, enemies, stats, swordCfg) {
     }
     e.hp -= damage;
     e.flash = 0.14;
-    e.hitStun = 0.18;
+    e.hitStun = finisher ? 0.32 : 0.2;
+    // A clean hit interrupts a wind-up (bosses shrug it off)
+    if (e.slamState === 'windup' && !e.isBoss) {
+      e.slamState = 'idle';
+      e.slamT = 0;
+      e.slamCd = Math.max(e.slamCd || 0, 0.45);
+    }
     e.vx = box.dir * kb;
     e.vy = Math.min(e.vy, player.attackAir ? -80 : -40);
-    hits.push({ enemy: e, index: i, killed: e.hp <= 0, box });
+    hits.push({ enemy: e, index: i, killed: e.hp <= 0, box, damage, finisher });
   }
 
   if (hits.length) player.attackHitDone = true;
   return { hitAny: hits.length > 0, hits, box };
+}
+
+/** Third swing of a chain. */
+export function isComboFinisher(player) {
+  return !!player && player.combo === 2;
 }
 
 /**

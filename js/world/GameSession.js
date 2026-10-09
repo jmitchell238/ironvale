@@ -9,7 +9,7 @@
  */
 
 import {
-  PLAYER, PLAYER_BODY, PLAYER_SWORD, MAX_PARTICLES,
+  PLAYER, PLAYER_BODY, PLAYER_SWORD, MAX_PARTICLES, PICKUPS,
 } from '../config/index.js';
 import { rand, dist } from '../core/math.js';
 import { getAttackBox } from '../domain/combat.js';
@@ -145,6 +145,14 @@ export class GameSession {
     this.enemies = [];
     this.coins = [];
     this.particles = [];
+    /** Floating damage numbers / labels. */
+    this.popups = [];
+    /** One-shot sprite effects (enemy death flames, sword sparks). */
+    this.effects = [];
+    /** Hearts and other pickups placed in the stage. */
+    this.pickups = [];
+    /** Seconds an attack press stays queued. */
+    this.attackBuffer = 0;
     this.levelChoices = [];
     this.jumpBuffered = 0;
     this.jumpHeld = false;
@@ -351,6 +359,20 @@ export class GameSession {
     }
   }
 
+  popup(x, y, text, color) {
+    if (this.popups.length > 24) this.popups.shift();
+    this.popups.push({ x, y, text, color: color || '#fff', life: 0.75, max: 0.75 });
+  }
+
+  effect(key, x, y, opts = {}) {
+    if (this.effects.length > 24) this.effects.shift();
+    this.effects.push({ key, x, y, t: 0, dir: opts.dir || 1 });
+  }
+
+  spark(x, y, dir) {
+    this.effect('fx/spark', x, y, { dir });
+  }
+
   // ---- spawns / enemy (enemy system) ----------------------------------------
 
   findPlatformAt(x, preferredY) { return sysFindPlatformAt(this, x, preferredY); }
@@ -376,7 +398,7 @@ export class GameSession {
   hurtPlayer(dmg) { sysHurtPlayer(this, dmg); }
   getAttackBoxForPlayer(p = this.player) { return sysGetAttackBox(this, p); }
   applyAttackHits() { sysApplyAttackHits(this); }
-  doAttack() { sysDoAttack(this); }
+  doAttack() { return sysDoAttack(this); }
 
   // ---- camera ---------------------------------------------------------------
 
@@ -405,8 +427,13 @@ export class GameSession {
     if (input.jump) this.requestJump();
     if (input.attack || this.attackQueued) {
       this.attackQueued = false;
-      this.doAttack();
+      this.attackBuffer = PLAYER_SWORD.attackBuffer || 0.0001;
     }
+    if (this.attackBuffer > 0) {
+      if (this.doAttack()) this.attackBuffer = 0;
+      else this.attackBuffer = Math.max(0, this.attackBuffer - dt);
+    }
+    if (this.player?.hurtT > 0) this.player.hurtT = Math.max(0, this.player.hurtT - dt);
 
     updatePlayer(this, dt, input);
     this.updateCamera(dt);
@@ -419,6 +446,7 @@ export class GameSession {
     if (this.screen !== 'play') return;
 
     this._updateCoins(dt);
+    this._updatePickups();
     this._updateParticles(dt);
 
     this.score += dt * 0.8;
@@ -456,7 +484,38 @@ export class GameSession {
     }
   }
 
+  _updatePickups() {
+    const p = this.player;
+    if (!p) return;
+    const pcx = playerCx(p);
+    const pcy = playerCy(p);
+    for (const pk of this.pickups) {
+      if (pk.taken) continue;
+      const cfg = PICKUPS[pk.type];
+      if (!cfg || dist(pk.x, pk.y, pcx, pcy) > cfg.r + p.w * 0.5) continue;
+      if (pk.type === 'heart' && p.hp >= p.maxHp) continue;
+      pk.taken = true;
+      if (cfg.heal) {
+        p.hp = Math.min(p.maxHp, p.hp + cfg.heal);
+        this.popup(pk.x, pk.y - 16, '+' + cfg.heal, '#ff8080');
+        this.burst(pk.x, pk.y, '#ff6b6b', 12, 90);
+      }
+      this.audio.coin();
+    }
+  }
+
   _updateParticles(dt) {
+    for (let i = this.popups.length - 1; i >= 0; i--) {
+      const q = this.popups[i];
+      q.life -= dt;
+      q.y -= 40 * dt;
+      if (q.life <= 0) this.popups.splice(i, 1);
+    }
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      const fx = this.effects[i];
+      fx.t += dt;
+      if (fx.t > 0.6) this.effects.splice(i, 1);
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -488,6 +547,9 @@ export class GameSession {
       enemies: this.enemies,
       coins: this.coins,
       particles: this.particles,
+      popups: this.popups,
+      effects: this.effects,
+      pickups: this.pickups,
       levelChoices: this.levelChoices,
       level: this.level,
       levelPhase: this.levelPhase,

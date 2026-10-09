@@ -1,13 +1,15 @@
 # Asset credits
 
-## Hero, enemies, tiles, vista (v2)
+All pixel art in `assets/gv/` is by **Luis Zuno ([@ansimuz](https://www.patreon.com/ansimuz))**. `tools/build_assets.py` cuts it into the strips the game loads; the original license files are in `assets/gv/licenses/`.
 
-Painted apprentice knight, goblin, bat, shield skeleton, mossy stone tiles,
-ladder, gate, coin, flag, and Forgegate vista derived from the Ironvale
-concept mockups (ChatGPT concept art used as style anchors, then isolated
-into engine-ready sprites).
+| Pack | Used for | License |
+|------|----------|---------|
+| [Magic Cliffs Environment](https://opengameart.org/content/magic-cliffs-environment) | Stage 1 tiles, sky, clouds, distant islands, sea | [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/): credit Luis Zuno (@ansimuz) |
+| [Gothicvania Patreon's Collection](https://opengameart.org/content/gothicvania-patreons-collection) | The knight (Gothic Hero), wolf | Public domain |
+| [Gothicvania Cemetery](https://opengameart.org/content/gothicvania-cemetery-pack) | Skeletons, ghost, enemy death flames | Public domain |
 
-## Legacy pixel pack (unused in v2)
+The CC-BY credit is also shown on the game's main menu.
 
-- The Knight — Free Sprite (OpenGameArt / GameArt2D)
-  https://opengameart.org/content/the-knight-free-sprite
+## Other sprites
+
+The checkpoint flag, coin, heart, ladder and the placeholder tiles used by stages 2–4 (`assets/sprites/`) were made for Ironvale from its concept art.

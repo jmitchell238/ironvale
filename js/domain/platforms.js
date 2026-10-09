@@ -24,11 +24,12 @@ export function makePlatform(x, y, w, opts = {}) {
   return {
     x,
     y,
-    w: Math.max(minW, w),
+    w: opts.exact ? w : Math.max(minW, w),
     h,
     ground,
     style,
     kind: 'platform',
+    oneWay: !!opts.oneWay,
   };
 }
 
@@ -76,27 +77,57 @@ export function findLadderAt(p, ladders) {
 }
 
 /**
- * Solid AABB blockers (locked gate). Mutates player x/vx on overlap.
+ * Solid rectangles (stage walls, ceilings, the locked gate). Uses where the
+ * body was last frame to decide the side: from above it lands, from below it
+ * bumps its head, otherwise it is pushed out sideways.
+ * Works for anything shaped like the player: x = centre, y = feet, w, h.
+ * @returns {{ landed: boolean, bumped: boolean, wall: number }}
  */
-export function resolveSolidBlockers(p, blockers) {
-  if (!p || !blockers || !blockers.length) return;
-  const left = p.x - p.w / 2;
-  const right = p.x + p.w / 2;
-  const top = p.y - p.h;
-  const bot = p.y;
-  for (const b of blockers) {
+export function resolveSolids(p, rects, prevY) {
+  const out = { landed: false, bumped: false, wall: 0 };
+  if (!p || !rects || !rects.length) return out;
+  const py = prevY != null ? prevY : p.y;
+  for (const b of rects) {
+    const left = p.x - p.w / 2;
+    const right = p.x + p.w / 2;
+    const top = p.y - p.h;
+    const bot = p.y;
     if (right <= b.x || left >= b.x + b.w) continue;
     if (bot <= b.y || top >= b.y + b.h) continue;
-    const overlapL = right - b.x;
-    const overlapR = b.x + b.w - left;
-    if (overlapL < overlapR) {
-      p.x -= overlapL;
-      if (p.vx > 0) p.vx = 0;
+    if (py <= b.y + 0.5) {
+      p.y = b.y;
+      if (p.vy > 0) p.vy = 0;
+      out.landed = true;
+    } else if (py - p.h >= b.y + b.h - 0.5) {
+      p.y = b.y + b.h + p.h;
+      if (p.vy < 0) p.vy = 0;
+      out.bumped = true;
     } else {
-      p.x += overlapR;
-      if (p.vx < 0) p.vx = 0;
+      const overlapL = right - b.x;
+      const overlapR = b.x + b.w - left;
+      if (overlapL < overlapR) {
+        p.x -= overlapL;
+        if (p.vx > 0) p.vx = 0;
+        out.wall = 1;
+      } else {
+        p.x += overlapR;
+        if (p.vx < 0) p.vx = 0;
+        out.wall = -1;
+      }
     }
   }
+  return out;
+}
+
+/** True when a body of height h fits at (x, feetY) without touching a solid. */
+export function hasHeadroom(x, feetY, w, h, rects) {
+  if (!rects) return true;
+  for (const b of rects) {
+    if (x + w / 2 <= b.x || x - w / 2 >= b.x + b.w) continue;
+    if (feetY <= b.y || feetY - h >= b.y + b.h) continue;
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -107,6 +138,8 @@ export function buildPlatformsFromDefs(list) {
   return (list || []).map(p => makePlatform(p.x, p.y, p.w, {
     style: p.style,
     h: p.h,
+    exact: p.exact,
+    oneWay: p.oneWay,
   }));
 }
 

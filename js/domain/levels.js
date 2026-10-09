@@ -3,10 +3,14 @@
  * Layout/spawns live here — not in render.
  *
  * Campaign (4 biomes): Forgegate Fields → Forest Ramparts → Forge Ruins → Iron Caverns.
+ * Forgegate Fields is a tile-map stage (see tilemap.js); the others are still blockouts.
  */
 
 import { GROUND_Y, W, H } from '../config/index.js';
 import { buildPlatformsFromDefs, makeLadder } from './platforms.js';
+import {
+  TILE, createTileMap, fillCells, groundCells, compileTileMap,
+} from './tilemap.js';
 
 /**
  * @typedef {{ type: string, x?: number, y?: number }} LevelEnemySpawn
@@ -41,88 +45,183 @@ import { buildPlatformsFromDefs, makeLadder } from './platforms.js';
  */
 
 /**
- * Painted Forgegate vista. Collision is authored in the source image's
- * pixels (1280×720), then scaled into world space. Do not draw these
- * platforms — the painting is the scenery.
+ * Stamps cut from the Magic Cliffs tileset. `src` is [col, row, wide, tall] in
+ * source tiles; `walk` is the one-way top (world px from the stamp's corner).
  */
-const IMG_W = 1280;
-const IMG_H = 720;
-const FG = { x: 0, y: 0, w: 1600, h: 900 };
-const SX = FG.w / IMG_W;
-const SY = FG.h / IMG_H;
-const px = (x) => FG.x + x * SX;
-const py = (y) => FG.y + y * SY;
-const pw = (w) => w * SX;
+export const STAMPS = {
+  island: { src: [2, 1, 7, 5], walk: { dx: 24, dy: 22, w: 184 } },
+  islet: { src: [3, 7, 3, 3], walk: { dx: 8, dy: 26, w: 80 } },
+  tree: { src: [12, 3, 8, 7], layer: 'back' },
+  pillar: { src: [9, 6, 2, 4], layer: 'back' },
+  fern: { src: [6, 11, 1, 1], layer: 'front' },
+};
 
-function hiddenPlat(x, y, w) {
-  return { x: px(x), y: py(y), w: pw(w), style: 'hidden', h: 22 };
+/** Stamp whose bottom sits on top of ground row `r` (for scenery). */
+function standStamp(map, name, c, r) {
+  const st = STAMPS[name];
+  map.stamps.push({ name, x: c * TILE, y: r * TILE - st.src[3] * TILE, src: st.src, layer: st.layer || 'back' });
 }
+
+function floatStamp(map, name, c, r) {
+  const st = STAMPS[name];
+  const x = c * TILE;
+  const y = r * TILE;
+  map.stamps.push({ name, x, y, src: st.src, layer: 'mid' });
+  map.extraPlatforms.push({
+    x: x + st.walk.dx, y: y + st.walk.dy, w: st.walk.w,
+    style: 'tile', h: 16, exact: true, oneWay: true, kind: 'island',
+  });
+}
+
+function coinRow(map, c0, c1, r) {
+  for (let c = c0; c <= c1; c++) map.coins.push([c, r]);
+}
+
+function coinArc(map, c0, c1, r, lift) {
+  const n = c1 - c0;
+  for (let c = c0; c <= c1; c++) {
+    const t = n ? (c - c0) / n : 0.5;
+    map.coins.push([c, r - Math.round(Math.sin(t * Math.PI) * lift)]);
+  }
+}
+
+/** Foot position of a cell: centre x, top of the ground row it stands on. */
+const foot = (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE });
+const air = (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 });
+
+/** Encounter that fires when the player gets within `lead` px of its first enemy. */
+function encounter(id, lead, enemies) {
+  const minX = Math.min(...enemies.map(e => e.x));
+  return { id, triggerX: Math.max(0, minX - lead), enemies };
+}
+
+function buildForgegateFields() {
+  const map = createTileMap(180, 22);
+  map.extraPlatforms = [];
+
+  // A — sunny meadow: spawn, a step, a teaching skeleton
+  fillCells(map, 0, 7, 0, 21, '#');
+  groundCells(map, 1, 13, 17);
+  groundCells(map, 14, 29, 16);
+  fillCells(map, 18, 14, 21, 14, '=');
+  standStamp(map, 'tree', 3, 17);
+  standStamp(map, 'fern', 9, 17);
+  standStamp(map, 'fern', 24, 16);
+  coinArc(map, 8, 12, 15, 1);
+  coinRow(map, 18, 21, 13);
+
+  // B — rope bridge over the first drop; ghost overhead; high ledge for double jumpers
+  fillCells(map, 30, 16, 37, 16, 'b');
+  groundCells(map, 38, 49, 16);
+  standStamp(map, 'pillar', 44, 16);
+  fillCells(map, 40, 12, 43, 12, '=');
+  coinRow(map, 40, 43, 11);
+  coinArc(map, 31, 36, 14, 1);
+
+  // C — raised field, ladder to a hidden alcove, first checkpoint
+  groundCells(map, 50, 75, 14);
+  fillCells(map, 63, 8, 70, 8, '=');
+  map.ladders.push({ c: 66, rTop: 8, rBottom: 14 });
+  map.pickups.push({ type: 'heart', c: 68, r: 7 });
+  coinRow(map, 63, 65, 7);
+  standStamp(map, 'tree', 52, 14);
+  standStamp(map, 'fern', 58, 14);
+  standStamp(map, 'fern', 72, 14);
+
+  // D — island hopping over the sea
+  floatStamp(map, 'island', 77, 13);
+  floatStamp(map, 'islet', 86, 11);
+  floatStamp(map, 'island', 90, 12);
+  floatStamp(map, 'islet', 98, 12);
+  coinArc(map, 78, 82, 12, 1);
+  coinArc(map, 84, 89, 9, 2);
+  coinArc(map, 91, 95, 11, 1);
+  coinRow(map, 99, 100, 11);
+
+  // E — grove; ladder (or double jump) up to the wolves' plateau
+  groundCells(map, 102, 111, 14);
+  fillCells(map, 108, 11, 111, 11, '=');
+  map.ladders.push({ c: 109, rTop: 11, rBottom: 14 });
+  groundCells(map, 112, 131, 11);
+  standStamp(map, 'tree', 103, 14);
+  standStamp(map, 'pillar', 116, 11);
+  standStamp(map, 'fern', 127, 11);
+  coinRow(map, 113, 118, 10);
+  map.pickups.push({ type: 'heart', c: 104, r: 13 });
+
+  // F — drop down, second checkpoint, climb the stone steps
+  groundCells(map, 132, 152, 15);
+  fillCells(map, 138, 12, 141, 12, '=');
+  fillCells(map, 143, 9, 146, 9, '=');
+  fillCells(map, 148, 6, 150, 6, '=');
+  coinRow(map, 138, 141, 11);
+  coinRow(map, 143, 146, 8);
+  map.pickups.push({ type: 'heart', c: 149, r: 5 });
+  standStamp(map, 'fern', 135, 15);
+
+  // G — the gate field: last fight, then the Forgegate
+  groundCells(map, 153, 179, 14);
+  fillCells(map, 178, 0, 179, 13, '#');
+  standStamp(map, 'tree', 154, 14);
+  coinArc(map, 158, 163, 12, 1);
+
+  const compiled = compileTileMap(map);
+  compiled.platforms.push(...map.extraPlatforms);
+  return compiled;
+}
+
+const FG_MAP = buildForgegateFields();
 
 const FORGEGATE_FIELDS = {
   id: 'forgegate-fields',
   name: 'Forgegate Fields',
-  subtitle: 'Explore · climb · fight · open the gate',
+  subtitle: 'Cliffs by the sea · climb · fight · open the gate',
   order: 1,
   stub: false,
-  vista: { key: 'bg/forgegate', x: FG.x, y: FG.y, w: FG.w, h: FG.h },
-  bounds: { minX: 0, maxX: FG.w, minY: 0, maxY: FG.h + 120 },
-  spawn: { x: px(280), y: py(392) },
-  platforms: [
-    hiddenPlat(0, 392, 378),     // left terrace
-    hiddenPlat(72, 516, 215),    // wooden deck under left ladder
-    hiddenPlat(418, 362, 275),   // mid goblin ledge
-    hiddenPlat(675, 368, 295),   // rope bridge
-    hiddenPlat(655, 550, 305),   // lower skeleton walk
-    hiddenPlat(948, 546, 332),   // gate terrace
-    hiddenPlat(140, 668, 600),   // fall catch
-  ],
-  ladders: [
-    { x: px(194), y: py(392), h: py(516) - py(392), w: 36 },
-    { x: px(778), y: py(362), h: py(550) - py(362), w: 36 },
-    { x: px(990), y: py(546), h: py(678) - py(546), w: 36 },
-  ],
-  props: [
-    { type: 'crate', x: px(500), y: py(362) },
-    { type: 'barrel', x: px(535), y: py(362) },
-  ],
-  coins: [
-    { x: px(390), y: py(350) },
-    { x: px(420), y: py(350) },
-    { x: px(450), y: py(350) },
-    { x: px(1088), y: py(520) },
-    { x: px(1124), y: py(520) },
-    { x: px(1020), y: py(250) },
-    { x: px(1055), y: py(250) },
-  ],
+  theme: 'cliffs',
+  tiles: FG_MAP.tiles,
+  solids: FG_MAP.solids,
+  bounds: { minX: 0, maxX: 180 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
+  spawn: foot(4, 17),
+  platforms: FG_MAP.platforms,
+  ladders: FG_MAP.ladders,
+  coins: FG_MAP.coins,
+  pickups: FG_MAP.pickups,
+  props: [],
   encounters: [
-    {
-      id: 'fg-goblin',
-      triggerX: px(360),
-      enemies: [{ type: 'goblin', x: px(560), y: py(362) }],
-    },
-    {
-      id: 'fg-bats',
-      triggerX: px(500),
-      enemies: [
-        { type: 'bat', x: px(740), y: py(280) },
-        { type: 'bat', x: px(620), y: py(470) },
-      ],
-    },
-    {
-      id: 'fg-skeleton',
-      triggerX: px(640),
-      enemies: [{ type: 'shield_skeleton', x: px(820), y: py(550) }],
-    },
-    {
-      id: 'fg-gate-guard',
-      triggerX: px(880),
-      enemies: [{ type: 'goblin', x: px(1020), y: py(546) }],
-    },
+    encounter('fg-first-bones', 420, [{ type: 'goblin', ...foot(26, 16) }]),
+    encounter('fg-bridge-ghost', 560, [{ type: 'bat', ...air(36, 11) }]),
+    encounter('fg-field-pair', 420, [
+      { type: 'goblin', ...foot(46, 16) },
+      { type: 'shield_skeleton', ...foot(58, 14) },
+    ]),
+    encounter('fg-sea-ghosts', 560, [
+      { type: 'bat', ...air(88, 7) },
+      { type: 'bat', ...air(95, 9) },
+    ]),
+    encounter('fg-grove', 420, [{ type: 'goblin', ...foot(106, 14) }]),
+    encounter('fg-wolves', 520, [
+      { type: 'wolf', ...foot(122, 11) },
+      { type: 'wolf', ...foot(127, 11) },
+    ]),
+    encounter('fg-steps', 420, [
+      { type: 'shield_skeleton', ...foot(147, 15) },
+      { type: 'bat', ...air(144, 6) },
+    ]),
+    encounter('fg-gate-guard', 420, [
+      { type: 'goblin', ...foot(165, 14) },
+      { type: 'shield_skeleton', ...foot(169, 14) },
+      { type: 'wolf', ...foot(172, 14) },
+      { type: 'bat', ...air(167, 9) },
+    ]),
   ],
-  checkpoints: [{ id: 'fg-mid', x: px(780), y: py(368) }],
-  gateX: px(1088),
-  gate: { x: px(1075), y: py(400), w: pw(120), h: py(546) - py(400) },
-  clearBonus: 100,
+  checkpoints: [
+    { id: 'fg-field', ...foot(73, 14) },
+    { id: 'fg-steps', ...foot(134, 15) },
+  ],
+  gateX: 175 * TILE,
+  gate: { x: 174 * TILE, y: 14 * TILE - 128, w: 64, h: 128, blockTop: 0 },
+  clearBonus: 160,
 };
 
 function stubBiome(opts) {
@@ -280,7 +379,8 @@ export function playerWorldLimits(def) {
     minX: def.bounds.minX + 24,
     maxX: def.bounds.maxX - 24,
     minY: (def.bounds.minY != null ? def.bounds.minY : 0) + 8,
-    maxY: def.bounds.maxY != null ? def.bounds.maxY - 8 : GROUND_Y + 200,
+    maxY: def.bounds.fallY != null ? def.bounds.fallY
+      : (def.bounds.maxY != null ? def.bounds.maxY - 8 : GROUND_Y + 200),
   };
 }
 

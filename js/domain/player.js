@@ -10,7 +10,7 @@ import {
   PLAYER_BODY, PLAYER_MOVE, PLAYER, GROUND_Y, CAM, CLIMB, xpForLevel,
 } from '../config/index.js';
 import { tickMeleeAttack } from './combat.js';
-import { findLadderAt, resolveSolidBlockers } from './platforms.js';
+import { findLadderAt, resolveSolids, hasHeadroom } from './platforms.js';
 
 export function makePlayer() {
   const h = PLAYER_BODY.h;
@@ -87,6 +87,7 @@ export function integratePlayerMovement(dt, input, ctx) {
     const snap = CLIMB.snapSpeed != null ? CLIMB.snapSpeed : 180;
     const dx = ladder.x - p.x;
     if (Math.abs(dx) > 2) p.x += Math.sign(dx) * Math.min(Math.abs(dx), snap * dt);
+    const climbPrevY = p.y;
     p.y += iy * (CLIMB.speed != null ? CLIMB.speed : 150) * dt;
     // Stay inside the ladder column
     const top = ladder.y;
@@ -107,9 +108,9 @@ export function integratePlayerMovement(dt, input, ctx) {
       jumpBuffered = 0;
       if (ctx.onJump) ctx.onJump();
     }
-    resolveSolidBlockers(p, ctx.blockers);
+    resolveSolids(p, ctx.blockers, climbPrevY);
     const stillSwinging = tickMeleeAttack(p, dt, ctx.swordCfg, stats);
-    p.anim += dt * 0.8;
+    p.anim += dt * Math.abs(iy) * 1.4;
     return { jumpBuffered, stillSwinging };
   }
   p.climbing = false;
@@ -117,14 +118,17 @@ export function integratePlayerMovement(dt, input, ctx) {
   if (wantJump || (iy < -0.55 && !ladder)) jumpBuffered = PLAYER_MOVE.jumpBuffer;
 
   // ── Duck (ground only; hold down) ──
-  const wantDuck = p.onGround && iy >= duckThresh && !p.attacking && !p.climbing;
+  const wantDuck = p.onGround && iy >= duckThresh && !p.climbing
+    && (!p.attacking || p.ducking);
+  const standH = p.standH || PLAYER_BODY.h;
   if (wantDuck) {
     p.ducking = true;
     p.h = p.duckH || PLAYER_BODY.duckH || 28;
   } else if (p.ducking) {
-    // Stand up if headroom (always true in this game — no ceilings)
-    p.ducking = false;
-    p.h = p.standH || PLAYER_BODY.h;
+    if (hasHeadroom(p.x, p.y, p.w, standH, ctx.blockers)) {
+      p.ducking = false;
+      p.h = standH;
+    }
   } else {
     p.h = p.standH || PLAYER_BODY.h;
   }
@@ -132,14 +136,18 @@ export function integratePlayerMovement(dt, input, ctx) {
   const spd = PLAYER_MOVE.runSpeed * stats.speedMul
     * (p.ducking ? (PLAYER_MOVE.duckSpeedMul != null ? PLAYER_MOVE.duckSpeedMul : 0.45) : 1);
   const mx = Math.abs(ix) > 0.08 ? clamp(ix, -1, 1) : 0;
-  const targetVx = mx * spd;
+  const planted = p.attacking && p.onGround && !p.attackAir;
+  const targetVx = mx * spd
+    * (planted && ctx.swordCfg?.groundAttackMoveMul != null ? ctx.swordCfg.groundAttackMoveMul : 1);
   const accel = p.onGround ? 2800 : 1800;
   const control = p.onGround ? 1 : PLAYER_MOVE.airControl;
   if (Math.abs(targetVx - p.vx) < accel * dt) p.vx = targetVx;
   else p.vx += Math.sign(targetVx - p.vx) * accel * dt * control;
 
-  if (mx > 0.1) p.facing = 1;
-  else if (mx < -0.1) p.facing = -1;
+  if (!p.attacking) {
+    if (mx > 0.1) p.facing = 1;
+    else if (mx < -0.1) p.facing = -1;
+  }
 
   if (jumpBuffered > 0) jumpBuffered -= dt;
   if (p.onGround) {
@@ -150,7 +158,7 @@ export function integratePlayerMovement(dt, input, ctx) {
   }
 
   // Ground / coyote jump
-  if (jumpBuffered > 0 && p.coyote > 0 && !p.attacking && !p.ducking) {
+  if (jumpBuffered > 0 && p.coyote > 0 && !p.ducking) {
     p.vy = PLAYER_MOVE.jumpVel * stats.jumpMul;
     p.onGround = false;
     p.coyote = 0;
@@ -164,7 +172,6 @@ export function integratePlayerMovement(dt, input, ctx) {
     && !p.onGround
     && p.coyote <= 0
     && (p.airJumps || 0) > 0
-    && !p.attacking
   ) {
     p.vy = (PLAYER_MOVE.doubleJumpVel != null ? PLAYER_MOVE.doubleJumpVel : PLAYER_MOVE.jumpVel * 0.86)
       * stats.jumpMul;
@@ -192,6 +199,7 @@ export function integratePlayerMovement(dt, input, ctx) {
   }
 
   p.onGround = false;
+  const prevY = p.y;
   p.y += p.vy * dt;
 
   if (p.vy >= 0) {
@@ -199,25 +207,35 @@ export function integratePlayerMovement(dt, input, ctx) {
       const left = playerLeft(p);
       const right = playerRight(p);
       if (right <= pl.x + 4 || left >= pl.x + pl.w - 4) continue;
-      const prevFeet = p.y - p.vy * dt;
-      if (prevFeet <= pl.y + 10 && p.y >= pl.y) {
+      if (prevY <= pl.y + 10 && p.y >= pl.y) {
         p.y = pl.y;
         p.vy = 0;
         p.onGround = true;
         p.airJumps = maxAir;
+        // Remember solid footing away from the edges for pit respawns
+        if (p.x > pl.x + 30 && p.x < pl.x + pl.w - 30) {
+          p.safeX = p.x;
+          p.safeY = pl.y;
+        }
         break;
       }
     }
   }
 
-  resolveSolidBlockers(p, ctx.blockers);
+  const solid = resolveSolids(p, ctx.blockers, prevY);
+  if (solid.landed) {
+    p.onGround = true;
+    p.airJumps = maxAir;
+  }
 
   const fallY = ctx.worldMaxY != null ? ctx.worldMaxY : GROUND_Y + 220;
   if (p.y > fallY) {
     if (ctx.onFellOff) ctx.onFellOff();
-    p.y = ctx.respawnY != null ? ctx.respawnY : GROUND_Y;
+    const useSafe = p.safeX != null && ctx.preferSafeRespawn;
+    p.y = useSafe ? p.safeY : (ctx.respawnY != null ? ctx.respawnY : GROUND_Y);
     p.vy = 0;
-    p.x = ctx.respawnX != null ? ctx.respawnX : (ctx.cameraX + CAM.focusX);
+    p.vx = 0;
+    p.x = useSafe ? p.safeX : (ctx.respawnX != null ? ctx.respawnX : (ctx.cameraX + CAM.focusX));
     p.inv = PLAYER_MOVE.invuln;
     p.airJumps = maxAir;
     p.climbing = false;

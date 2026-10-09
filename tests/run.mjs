@@ -721,6 +721,163 @@ section('New Game+ + juice hitstop');
   assert(s.hitstop > 0, 'hitstop applied');
 }
 
+section('tile maps compile to tops, solids and one-way ledges');
+{
+  const tm = await import(js('js/domain/tilemap.js'));
+  const m = tm.createTileMap(10, 6);
+  tm.groundCells(m, 0, 3, 4);
+  tm.groundCells(m, 4, 9, 2);
+  tm.fillCells(m, 1, 1, 2, 1, '=');
+  const out = tm.compileTileMap(m);
+  const tops = out.platforms.filter(p => !p.oneWay).sort((a, b) => a.x - b.x);
+  assertEq(tops.length, 2, 'two walkable tops');
+  assertEq(tops[0].y, 4 * tm.TILE, 'low top height');
+  assertEq(tops[1].w, 6 * tm.TILE, 'merged top width');
+  const ledges = out.platforms.filter(p => p.oneWay);
+  assertEq(ledges.length, 1, 'one ledge');
+  assertEq(ledges[0].w, 2 * tm.TILE, 'ledge keeps its exact width');
+  const area = out.solids.reduce((a, r) => a + r.w * r.h, 0);
+  assertEq(area, (4 * 2 + 6 * 4) * tm.TILE * tm.TILE, 'solids cover every ground cell');
+}
+
+section('solid collision: walls push, ceilings bump, tops land');
+{
+  const { resolveSolids, hasHeadroom } = platforms;
+  const wall = [{ x: 100, y: 0, w: 64, h: 200 }];
+  const a = { x: 95, y: 150, w: 26, h: 70, vx: 200, vy: 0 };
+  const r1 = resolveSolids(a, wall, 150);
+  assert(a.x + a.w / 2 <= 100.01, 'pushed out of the wall');
+  assertEq(r1.wall, 1, 'hit wall on the right');
+  assertEq(a.vx, 0, 'run stopped');
+  const ceil = [{ x: 0, y: 0, w: 300, h: 100 }];
+  const b = { x: 150, y: 165, w: 26, h: 70, vx: 0, vy: -400 };
+  const r2 = resolveSolids(b, ceil, 175);
+  assert(r2.bumped, 'head bump');
+  assertEq(b.y, 170, 'held under the ceiling');
+  assert(b.vy >= 0, 'upward speed killed');
+  const floor = [{ x: 0, y: 300, w: 300, h: 64 }];
+  const c = { x: 150, y: 310, w: 26, h: 70, vx: 0, vy: 300 };
+  assert(resolveSolids(c, floor, 296).landed, 'lands from above');
+  assertEq(c.y, 300, 'feet on the top');
+  assert(!hasHeadroom(150, 170, 26, 80, ceil), 'no room to stand under a low ceiling');
+  assert(hasHeadroom(150, 400, 26, 70, ceil), 'room in the open');
+}
+
+section('Forgegate Fields is a full tile stage');
+{
+  const L = levels.getLevelById('forgegate-fields');
+  assert(L.tiles && L.solids?.length > 0, 'tile map + solids');
+  assert(L.bounds.maxX >= 5000, 'several screens long');
+  assert(L.encounters.length >= 6, 'plenty of fights');
+  assert(L.checkpoints.length >= 2, 'two checkpoints');
+  assert(L.coins.length >= 40, 'coins to collect');
+  assert(L.pickups.filter(p => p.type === 'heart').length >= 2, 'hearts to find');
+  const roster = new Set(L.encounters.flatMap(e => e.enemies.map(x => x.type)));
+  assert(roster.has('wolf'), 'wolves appear');
+  const plats = levels.buildLevelPlatforms(L);
+  const onPlat = (x, y) => plats.some(p => x >= p.x && x <= p.x + p.w && Math.abs(p.y - y) < 1);
+  assert(onPlat(L.spawn.x, L.spawn.y), 'spawn stands on ground');
+  for (const cp of L.checkpoints) assert(onPlat(cp.x, cp.y), `checkpoint ${cp.id} on ground`);
+  for (const enc of L.encounters) {
+    for (const e of enc.enemies) {
+      if (config.ENEMIES[e.type].fly) continue;
+      assert(onPlat(e.x, e.y), `${enc.id} ${e.type} stands on ground`);
+    }
+  }
+  for (const lad of L.ladders) assert(onPlat(lad.x, lad.y), 'ladder top is a ledge');
+}
+
+section('a simple bot can run stage 1 end to end');
+{
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  const plats = s.platforms;
+  const groundAhead = (x, y) => plats.some(p => x >= p.x && x <= p.x + p.w && p.y >= y - 4 && p.y <= y + 70);
+  let lastX = 0, stuck = 0, held = 0, maxX = 0;
+  for (let f = 0; f < 60 * 120 && s.screen === 'play'; f++) {
+    const p = s.player;
+    let jump = false;
+    stuck = Math.abs(p.x - lastX) < 0.5 ? stuck + 1 : 0;
+    if (p.onGround && (!groundAhead(p.x + 60, p.y) || stuck > 6)) { jump = true; held = 26; }
+    if (!p.onGround && p.vy > 60 && (p.airJumps || 0) > 0 && !groundAhead(p.x + 30, p.y)) { jump = true; held = 20; }
+    if (held > 0) held--;
+    s.setJumpHeld(held > 0);
+    lastX = p.x;
+    p.hp = p.maxHp;
+    s.update(1 / 60, { x: 1, y: stuck > 40 ? -1 : 0, jump, attack: f % 14 === 0 });
+    maxX = Math.max(maxX, s.player.x);
+  }
+  assert(maxX >= s.level.gate.x - 80, `bot reaches the gate (got ${Math.round(maxX)})`);
+  assert(s.kills >= 6, 'bot fought its way through');
+}
+
+section('combat feel: buffer, combo finisher, interrupt');
+{
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  const p = s.player;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: true });
+  assert(p.attacking, 'first swing');
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: true });
+  assert(s.attackBuffer > 0, 'press during a swing is queued');
+  let swings = 1;
+  let was = true;
+  for (let i = 0; i < 40; i++) {
+    s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+    if (p.attacking && !was) swings++;
+    was = p.attacking;
+  }
+  assertEq(swings, 2, 'queued swing fires on its own');
+  assertEq(p.combo, 1, 'second swing of a chain');
+
+  const e = s.spawnEnemy('goblin', { x: p.x + 300, y: p.y });
+  e.x = p.x + 40; e.y = p.y; e.spawnGrace = 0; e.rise = 0; e.hp = 999;
+  p.facing = 1;
+  const hitWith = (combo) => {
+    p.attacking = false; p.attackCd = 0; p.comboT = combo > 0 ? 1 : 0; p.combo = combo - 1;
+    const before = e.hp;
+    s.doAttack();
+    return before - e.hp;
+  };
+  const normal = hitWith(0);
+  const finisher = hitWith(2);
+  assert(finisher > normal * 1.4, 'third swing hits harder');
+
+  e.slamState = 'windup'; e.slamT = 0.3;
+  p.attacking = false; p.attackCd = 0;
+  s.doAttack();
+  assertEq(e.slamState, 'idle', 'a hit interrupts the wind-up');
+}
+
+section('pits, hearts and cliff knock-offs');
+{
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  const p = s.player;
+  for (let i = 0; i < 30; i++) s.update(1 / 60, { x: 1, y: 0, jump: false, attack: false });
+  const safeX = p.safeX;
+  assert(safeX != null, 'safe footing remembered');
+  p.y = s.level.bounds.fallY + 50;
+  p.vy = 400;
+  const hp0 = p.hp;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assert(p.hp < hp0, 'falling costs health');
+  assert(Math.abs(p.x - safeX) < 40, 'back on safe ground');
+
+  p.hp = 40;
+  const heart = s.pickups[0];
+  p.x = heart.x; p.y = heart.y + 30;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assert(heart.taken, 'heart picked up');
+  assert(p.hp > 40, 'heart heals');
+
+  const e = s.spawnEnemy('goblin', { x: p.x + 300, y: p.y });
+  e.y = s.level.bounds.fallY + 40; e.rise = 0;
+  const k = s.kills;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(s.kills, k + 1, 'enemy knocked into the sea counts as a kill');
+}
+
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failed) {
   for (const f of failures) console.error(' -', f);

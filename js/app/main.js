@@ -25,6 +25,7 @@ const stage = document.getElementById('stage');
 const saveStore = createSaveStore();
 const audio = createAudio(() => saveStore.data.muted);
 const session = new GameSession({ audio, save: saveStore });
+if (new URLSearchParams(location.search).has('debug')) window.__session = session;
 
 let ctx = null;
 let last = performance.now();

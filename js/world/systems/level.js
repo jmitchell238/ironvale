@@ -35,6 +35,7 @@ export function getGateBlocker(session) {
   if (!session.level || session.levelPhase !== 'explore') return null;
   if (isGateOpen(session)) return null;
   const g = session.level.gate;
+  if (g && g.blockTop != null) return { x: g.x, y: g.blockTop, w: g.w || 64, h: g.y + (g.h || 120) - g.blockTop };
   if (g) return { x: g.x, y: g.y, w: g.w || 64, h: g.h || 120 };
   if (session.level.gateX == null) return null;
   const gy = session.level.spawn?.y ?? GROUND_Y;
@@ -43,7 +44,8 @@ export function getGateBlocker(session) {
 
 export function refreshBlockers(session) {
   const b = getGateBlocker(session);
-  session.blockers = b ? [b] : [];
+  const solids = session.level?.solids || [];
+  session.blockers = b ? [...solids, b] : solids;
 }
 
 /** @param {import('../GameSession.js').GameSession} session */
@@ -107,6 +109,7 @@ function seedAuthoredCoins(session, def) {
       x: c.x, y: c.y, vx: 0, vy: 0, r: 8, xp: 1, life: 999, authored: true,
     });
   }
+  session.pickups = (def.pickups || []).map(p => ({ ...p, taken: false }));
 }
 
 export function enterBossArena(session) {
@@ -132,7 +135,7 @@ export function enterBossArena(session) {
     boss.isBoss = true;
   }
   session.shake = Math.max(session.shake, 2.5);
-  session.blockers = [];
+  session.blockers = session.level.solids || [];
   if (typeof session.burst === 'function') {
     session.burst(b.spawnX, (b.spawnY ?? GROUND_Y) - 30, '#e74c3c', 22, 140);
   }

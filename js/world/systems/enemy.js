@@ -12,6 +12,7 @@ import {
 } from '../../domain/enemyAi.js';
 import { ngPlusDamageMul, ngPlusHpMul } from '../../domain/rpg.js';
 import { playerCx, playerCy } from '../../domain/player.js';
+import { resolveSolids } from '../../domain/platforms.js';
 
 /**
  * @param {import('../GameSession.js').GameSession} session
@@ -125,6 +126,9 @@ export function spawnEnemy(session, type, opts = {}) {
     slamCd,
     slamHitDone: false,
     spawnGrace: grace,
+    /** Skeletons climb out of the ground before they act. */
+    rise: def.rises && !flying ? 0.6 : 0,
+    aiCfg: def.aggroX ? { ...ENEMY_AI, aggroX: def.aggroX } : ENEMY_AI,
   };
   session.enemies.push(enemy);
   return enemy;
@@ -145,10 +149,21 @@ export function canStandAt(session, x, refY) {
  * @param {number} dt
  */
 export function updateEnemy(session, e, dt) {
-  return aiUpdateEnemy(e, dt, session.player, session.platforms, ENEMY_AI, {
+  if (e.rise > 0) {
+    e.rise = Math.max(0, e.rise - dt);
+    e.phase += dt;
+    return null;
+  }
+  const prevY = e.y;
+  const hit = aiUpdateEnemy(e, dt, session.player, session.platforms, e.aiCfg || ENEMY_AI, {
     gravity: PLAYER_MOVE.gravity,
     maxFall: PLAYER_MOVE.maxFall,
   }, e.meleeCfg || getEnemyMeleeCfg(e));
+  if (!e.fly && session.level?.solids) {
+    const r = resolveSolids(e, session.level.solids, prevY);
+    if (r.landed) e.onGround = true;
+  }
+  return hit;
 }
 
 /**
@@ -165,6 +180,13 @@ export function updateEnemies(session, dt) {
   for (let i = session.enemies.length - 1; i >= 0; i--) {
     const e = session.enemies[i];
     const slamHit = updateEnemy(session, e, dt);
+    // Knocked off a cliff: count it as a kill
+    const fallY = session.level?.bounds?.fallY;
+    if (fallY != null && !e.fly && e.y > fallY) {
+      session.killEnemy(e, i);
+      if (session.screen !== 'play') return;
+      continue;
+    }
     // Don't cull bosses off-screen; cull far-behind fodder only
     if (!enemyIsBoss(e) && e.x < session.cameraX - 160) {
       session.enemies.splice(i, 1);

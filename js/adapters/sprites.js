@@ -1,27 +1,14 @@
 /** Adapter: sprite sheet loading + draw. */
 
-export const SPRITE_MANIFEST = {
-  'player/idle':   { src: 'assets/sprites/player/idle.png',   fw: 80, fh: 96, frames: 1, fps: 5 },
-  'player/run':    { src: 'assets/sprites/player/run.png',    fw: 80, fh: 96, frames: 2, fps: 10 },
-  'player/jump':   { src: 'assets/sprites/player/jump.png',   fw: 80, fh: 96, frames: 1, fps: 8 },
-  'player/djump':  { src: 'assets/sprites/player/djump.png',  fw: 80, fh: 96, frames: 1, fps: 10 },
-  'player/duck':   { src: 'assets/sprites/player/duck.png',   fw: 80, fh: 96, frames: 1, fps: 6 },
-  'player/attack': { src: 'assets/sprites/player/attack.png', fw: 96, fh: 96, frames: 1, fps: 14 },
-  'player/hurt':   { src: 'assets/sprites/player/hurt.png',   fw: 80, fh: 96, frames: 1, fps: 8 },
-  'player/portrait': { src: 'assets/sprites/player/portrait.png' },
-  'player/logo':     { src: 'assets/sprites/player/logo.png' },
+import { SPRITE_META } from '../config/spriteMeta.js';
 
-  'enemy/goblin':    { src: 'assets/sprites/enemies/goblin.png',    fw: 64, fh: 72, frames: 1, fps: 6 },
-  'enemy/bat':       { src: 'assets/sprites/enemies/bat.png',       fw: 64, fh: 48, frames: 1, fps: 8 },
-  'enemy/skeleton':  { src: 'assets/sprites/enemies/skeleton.png',  fw: 64, fh: 72, frames: 1, fps: 5 },
-  'enemy/warden':    { src: 'assets/sprites/enemies/warden.png',    fw: 96, fh: 112, frames: 1, fps: 4 },
+export const SPRITE_MANIFEST = {
+  ...SPRITE_META,
+
 
   'bg/sky':        { src: 'assets/sprites/bg/sky.png' },
-  'bg/forgegate':  { src: 'assets/sprites/bg/forgegate.png' },
-  'bg/mountains':  { src: 'assets/sprites/bg/mountains.png' },
   'bg/castle':     { src: 'assets/sprites/bg/castle.png' },
-  'bg/forest':     { src: 'assets/sprites/bg/forest.png' },
-  'bg/bridge':     { src: 'assets/sprites/bg/bridge.png' },
+  'bg/hills':      { src: 'assets/sprites/bg/hills.png' },
 
   'tile/ground':   { src: 'assets/sprites/tiles/ground.png' },
   'tile/platform': { src: 'assets/sprites/tiles/platform.png' },
@@ -29,17 +16,12 @@ export const SPRITE_MANIFEST = {
 
   'prop/coin':     { src: 'assets/sprites/props/coin.png' },
   'prop/flag':     { src: 'assets/sprites/props/flag.png' },
-  'prop/gate':     { src: 'assets/sprites/props/gate.png' },
   'prop/torch':    { src: 'assets/sprites/props/torch.png' },
   'prop/crate':    { src: 'assets/sprites/props/crate.png' },
   'prop/barrel':   { src: 'assets/sprites/props/barrel.png' },
   'prop/banner':   { src: 'assets/sprites/props/banner.png' },
-  'prop/sign':     { src: 'assets/sprites/props/sign.png' },
-  'prop/chain':    { src: 'assets/sprites/props/chain.png' },
 
-  'fx/slash':      { src: 'assets/sprites/fx/slash.png' },
   'fx/heart':      { src: 'assets/sprites/fx/heart.png' },
-  'ui/logo':       { src: 'assets/sprites/ui/logo.png' },
 };
 
 const spriteCache = Object.create(null);
@@ -88,14 +70,16 @@ export function drawSprite(ctx, key, frame, x, y, opts = {}) {
   const flip = !!opts.flip;
   const camX = opts.camX != null ? opts.camX : (opts.cam || 0);
   const camY = opts.camY || 0;
-  const sx = x - camX;
-  const sy = y - camY;
+  const pixel = !!opts.pixel;
+  const sx = pixel ? Math.round(x - camX) : x - camX;
+  const sy = pixel ? Math.round(y - camY) : y - camY;
   const dw = fw * scale;
   const dh = fh * scale;
-  const col = frame % (meta.frames || 1);
+  const col = ((frame % (meta.frames || 1)) + (meta.frames || 1)) % (meta.frames || 1);
   ctx.save();
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
-  ctx.imageSmoothingEnabled = true;
+  if (opts.composite) ctx.globalCompositeOperation = opts.composite;
+  ctx.imageSmoothingEnabled = !pixel;
   if (flip) {
     ctx.translate(sx, sy);
     ctx.scale(-1, 1);
@@ -107,10 +91,10 @@ export function drawSprite(ctx, key, frame, x, y, opts = {}) {
   return true;
 }
 
-export function drawImageKey(ctx, key, dx, dy, dw, dh) {
+export function drawImageKey(ctx, key, dx, dy, dw, dh, smooth = false) {
   const entry = spriteCache[key];
   if (!entry || !entry.ready || !entry.img) return false;
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = !!smooth;
   ctx.drawImage(entry.img, dx, dy, dw, dh);
   return true;
 }

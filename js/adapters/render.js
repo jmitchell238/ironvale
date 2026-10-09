@@ -10,6 +10,11 @@ import {
 import { clamp } from '../core/math.js';
 import { getAttackBox, combatAttackDuration } from '../domain/combat.js';
 import { getSprite, animFrame, drawSprite, drawImageKey } from './sprites.js';
+import { getLevelById } from '../domain/levels.js';
+import {
+  drawCliffsBackground, drawTiles, drawStamps, drawLaddersPixel, drawPixelGate,
+  drawFlags, drawPickups, drawEffects, drawPopups,
+} from './renderStage.js';
 
 function camOf(cam) {
   if (cam && typeof cam === 'object') return { x: cam.x || 0, y: cam.y || 0 };
@@ -78,57 +83,36 @@ export function drawBackground(ctx, cam) {
     ctx.restore();
   }
 
-  if (!drawParallaxLayer(ctx, 'bg/mountains', cam, 0.10, 0.04, H * 0.28, H * 0.42)) {
-    ctx.save();
-    const scroll = (c.x * 0.1) % 220;
-    ctx.fillStyle = 'rgba(110, 140, 150, 0.55)';
-    ctx.beginPath();
-    ctx.moveTo(-40, H);
-    for (let x = -scroll; x < W + 80; x += 80) {
-      const peak = H * 0.38 - Math.sin((x + c.x) * 0.008) * 50 - c.y * 0.04;
-      ctx.lineTo(x, peak);
-    }
-    ctx.lineTo(W + 40, H);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+  ctx.save();
+  const mScroll = (c.x * 0.1) % 220;
+  ctx.fillStyle = 'rgba(110, 140, 150, 0.55)';
+  ctx.beginPath();
+  ctx.moveTo(-40, H);
+  for (let x = -mScroll; x < W + 80; x += 80) {
+    ctx.lineTo(x, H * 0.38 - Math.sin((x + c.x) * 0.008) * 50 - c.y * 0.04);
   }
+  ctx.lineTo(W + 40, H);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 
   drawParallaxLayer(ctx, 'bg/castle', cam, 0.16, 0.05, H * 0.22, H * 0.5);
 
-  if (!drawParallaxLayer(ctx, 'bg/forest', cam, 0.28, 0.08, H * 0.48, H * 0.4)) {
-    ctx.save();
-    const tScroll = (c.x * 0.28) % 110;
-    for (let x = -tScroll; x < W + 50; x += 110) {
-      const base = H * 0.82 - c.y * 0.08;
-      const hgt = 48 + ((Math.floor(x + c.x) * 17) % 36);
-      ctx.globalAlpha = 0.32;
-      ctx.fillStyle = '#2a4a30';
-      ctx.fillRect(x + 22, base - hgt * 0.35, 7, hgt * 0.4);
-      ctx.beginPath();
-      ctx.moveTo(x + 4, base - hgt * 0.28);
-      ctx.lineTo(x + 26, base - hgt);
-      ctx.lineTo(x + 48, base - hgt * 0.28);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  drawParallaxLayer(ctx, 'bg/bridge', cam, 0.42, 0.12, H * 0.55, H * 0.28);
-}
-
-/** World-space painted backdrop (Forgegate Fields). */
-export function drawLevelVista(ctx, level, cam) {
-  const v = level && level.vista;
-  if (!v) return;
-  const entry = getSprite(v.key || 'bg/forgegate');
-  if (!entry || !entry.ready) return;
-  const x = wx(v.x, cam);
-  const y = wy(v.y, cam);
   ctx.save();
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(entry.img, x, y, v.w, v.h);
+  const tScroll = (c.x * 0.28) % 110;
+  for (let x = -tScroll; x < W + 50; x += 110) {
+    const base = H * 0.82 - c.y * 0.08;
+    const hgt = 48 + ((Math.floor(x + c.x) * 17) % 36);
+    ctx.globalAlpha = 0.32;
+    ctx.fillStyle = '#2a4a30';
+    ctx.fillRect(x + 22, base - hgt * 0.35, 7, hgt * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(x + 4, base - hgt * 0.28);
+    ctx.lineTo(x + 26, base - hgt);
+    ctx.lineTo(x + 48, base - hgt * 0.28);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -303,83 +287,51 @@ export function drawProps(ctx, props, cam) {
   }
 }
 
-function playerAnimKey(p) {
-  if (p.hp <= 0) return 'player/hurt';
-  if (p.inv > 0.4 && p.hp > 0) {
-    /* flash handled via alpha; keep pose */
+/** Pick the hero animation and frame for this moment. */
+export function playerPose(p, t, atkFull) {
+  const prog = atkFull > 0 ? clamp(1 - p.attackT / atkFull, 0, 0.999) : 0;
+  if (p.hp <= 0 || p.hurtT > 0) return { key: 'hero/hurt', frame: p.hp <= 0 ? 2 : Math.floor((0.3 - (p.hurtT || 0)) / 0.1) };
+  if (p.attacking) {
+    if (p.attackAir) return { key: 'hero/jump_attack', frame: 2 + Math.floor(prog * 4) };
+    if (p.ducking) return { key: 'hero/crouch_slash', frame: Math.floor(prog * 4) };
+    return { key: 'hero/attack', frame: 1 + Math.floor(prog * 5) };
   }
-  if (p.attacking) return 'player/attack';
-  if (p.climbing) return 'player/idle';
-  if (p.ducking) return getSprite('player/duck')?.ready ? 'player/duck' : 'player/idle';
+  if (p.climbing) return { key: 'hero/jump', frame: 1 + (Math.floor((p.anim || 0) * 4) % 2) };
+  if (p.ducking) return { key: 'hero/crouch', frame: 2 };
   if (!p.onGround) {
-    if ((p.airJumps || 0) <= 0 && getSprite('player/djump')?.ready) return 'player/djump';
-    return 'player/jump';
+    const f = p.vy < -260 ? 1 : p.vy < -40 ? 2 : p.vy < 220 ? 3 : 4;
+    return { key: 'hero/jump', frame: f };
   }
-  if (Math.abs(p.vx) > 40) return 'player/run';
-  return 'player/idle';
+  if (Math.abs(p.vx) > 30) {
+    const meta = getSprite('hero/run')?.meta || { fps: 16, frames: 12 };
+    return { key: 'hero/run', frame: animFrame(meta, p.anim || 0, 1.1) };
+  }
+  const meta = getSprite('hero/idle')?.meta || { fps: 6, frames: 4 };
+  return { key: 'hero/idle', frame: animFrame(meta, t, 1) };
 }
 
 export function drawPlayer(ctx, p, t, cam, stats) {
   if (!p) return;
-  const key = playerAnimKey(p);
-  const entry = getSprite(key);
   const rate = stats && stats.attackRate != null ? stats.attackRate : 1;
   const atkFull = combatAttackDuration(PLAYER_SWORD, { attackRate: rate });
-  let frame = 0;
-  if (entry && entry.meta) {
-    if (key === 'player/jump') {
-      frame = p.vy < -120 ? 2 : p.vy < 0 ? 4 : p.vy < 200 ? 6 : 8;
-    } else if (key === 'player/attack' || key === 'player/jump_attack') {
-      const prog = 1 - (p.attackT / atkFull);
-      frame = clamp(Math.floor(prog * 10), 0, 9);
-    } else {
-      frame = animFrame(entry.meta, p.anim != null ? p.anim : t * 0.4, 1);
-    }
-  }
+  const pose = playerPose(p, t, atkFull);
+  const c = camOf(cam);
 
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(wx(p.x, cam), wy(p.y, cam) - 1, p.ducking ? 16 : 14, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(Math.round(p.x - c.x), Math.round(p.y - c.y) - 1, 16, 4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  const flash = p.inv > 0 && Math.floor(t * 18) % 2 === 0;
-  let scale = PLAYER_DRAW.drawScale || 1.15;
-  if (p.ducking && key !== 'player/duck') scale *= 0.72;
-  const footY = p.ducking ? p.y + 4 : p.y + 2;
-  const ok = drawSprite(ctx, key, frame, p.x, footY, {
-    scale, flip: (p.facing || 1) < 0, ...spriteCam(cam), alpha: flash ? 0.4 : 1,
+  const flash = p.inv > 0 && p.hp > 0 && Math.floor(t * 18) % 2 === 0;
+  const ok = drawSprite(ctx, pose.key, pose.frame, p.x, p.y, {
+    scale: PLAYER_DRAW.drawScale || 2, flip: (p.facing || 1) < 0,
+    camX: c.x, camY: c.y, alpha: flash ? 0.45 : 1, pixel: true,
   });
   if (!ok) {
     ctx.fillStyle = '#3a6aa0';
-    ctx.fillRect(wx(p.x, cam) - 10, wy(p.y, cam) - p.h, 20, p.h);
-  }
-
-  if (p.attacking && p.attackT > atkFull * 0.25) {
-    const st = stats || { rangeMul: 1 };
-    const box = getAttackBox(p, st, PLAYER_SWORD);
-    const dir = p.facing || 1;
-    const rm = st.rangeMul != null ? st.rangeMul : 1;
-    const reach = (p.attackAir ? PLAYER_SWORD.airAttackRange : PLAYER_SWORD.attackRange) * rm;
-    const midX = box ? (box.x + box.w * 0.55) : (p.x + dir * (p.w * 0.2 + reach * 0.55));
-    const midY = box ? (box.y + box.h * 0.45) : (p.y - p.h * 0.5);
-    const fxW = Math.max(36, reach * 0.72);
-    const fxH = p.attackAir ? 32 : 24;
-    const life = clamp(p.attackT / atkFull, 0, 1);
-    ctx.save();
-    ctx.translate(wx(midX, cam), wy(midY, cam));
-    if (dir < 0) ctx.scale(-1, 1);
-    if (p.attackAir) ctx.rotate(0.35);
-    ctx.globalAlpha = 0.55 + life * 0.35;
-    if (!drawImageKey(ctx, 'fx/slash', -4, -fxH / 2, fxW, fxH)) {
-      ctx.strokeStyle = '#f5e6c8';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(fxW * 0.15, 0, fxW * 0.42, -1.0, 0.85);
-      ctx.stroke();
-    }
-    ctx.restore();
+    ctx.fillRect(wx(p.x, cam) - p.w / 2, wy(p.y, cam) - p.h, p.w, p.h);
   }
 }
 
@@ -388,9 +340,17 @@ export function drawEnemy(ctx, e, cam, t) {
   const sy = wy(e.y, cam);
   if (sx < -80 || sx > W + 80) return;
   if (sy < -120 || sy > H + 80) return;
-  const key = 'enemy/' + (e.skin || 'goblin');
-  const entry = getSprite(key);
-  const frame = entry && entry.meta ? animFrame(entry.meta, e.phase * 0.5, 1) : 0;
+  let key = 'enemy/' + (e.skin || 'skeleton');
+  let entry = getSprite(key);
+  let frame = 0;
+  if (e.rise > 0 && getSprite('enemy/skeleton_rise')?.ready) {
+    key = 'enemy/skeleton_rise';
+    entry = getSprite(key);
+    frame = Math.min(entry.meta.frames - 1, Math.floor((1 - e.rise / 0.6) * entry.meta.frames));
+  } else if (entry && entry.meta) {
+    const moving = e.fly || Math.abs(e.vx) > 5;
+    frame = moving ? animFrame(entry.meta, e.phase, 1) : (e.slamState === 'windup' ? 0 : animFrame(entry.meta, e.phase, 0.35));
+  }
   const bossLike = !!(e.isBoss || e.type === 'iron_warden');
   const scale = e.drawScale || (e.type === 'iron_warden' ? 1.35 : 1.15);
 
@@ -443,11 +403,13 @@ export function drawEnemy(ctx, e, cam, t) {
   ctx.fill();
   ctx.restore();
 
-  const slamFlash = e.slamState === 'windup' ? 0.55 + 0.25 * Math.sin(t * 20) : 1;
-  const alpha = e.flash > 0 ? 0.5 : slamFlash;
-  const ok = drawSprite(ctx, key, frame, e.x, e.y + 2, {
-    scale, flip: (e.facing || -1) > 0, ...spriteCam(cam), alpha,
-  });
+  const pixel = !!(entry && entry.meta && entry.meta.fw && e.drawScale === 2);
+  const sopts = { scale, flip: (e.facing || -1) > 0, ...spriteCam(cam), pixel };
+  const ok = drawSprite(ctx, key, frame, e.x, e.y + (pixel ? 0 : 2), sopts);
+  if (ok && (e.flash > 0 || e.slamState === 'windup')) {
+    const a = e.flash > 0 ? 0.85 : 0.25 + 0.25 * Math.sin(t * 24);
+    drawSprite(ctx, key, frame, e.x, e.y + (pixel ? 0 : 2), { ...sopts, alpha: a, composite: 'lighter' });
+  }
   if (!ok) {
     ctx.fillStyle = e.slamState === 'windup' ? '#c44' : e.color;
     ctx.fillRect(sx - e.w / 2, sy - e.h, e.w, e.h);
@@ -457,9 +419,10 @@ export function drawEnemy(ctx, e, cam, t) {
     const bw = Math.max(e.w, 28);
     const ratio = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(sx - bw / 2, sy - e.h * scale * 0.55 - 10, bw, 4);
+    const barY = sy - (pixel ? e.h + 14 : e.h * scale * 0.55 + 10);
+    ctx.fillRect(sx - bw / 2, barY, bw, 4);
     ctx.fillStyle = ratio > 0.35 ? '#7dffa0' : '#e74c3c';
-    ctx.fillRect(sx - bw / 2, sy - e.h * scale * 0.55 - 10, bw * ratio, 4);
+    ctx.fillRect(sx - bw / 2, barY, bw * ratio, 4);
   }
 
   if (e.label && bossLike) {
@@ -480,7 +443,7 @@ export function drawCoin(ctx, c, t, cam) {
   const bob = Math.sin(t * 5 + c.x) * 2;
   const x = wx(c.x, cam);
   const y = wy(c.y, cam) + bob;
-  if (!drawImageKey(ctx, 'prop/coin', x - 8, y - 8, 16, 16)) {
+  if (!drawImageKey(ctx, 'prop/coin', Math.round(x - 11), Math.round(y - 11), 22, 22, true)) {
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, Math.PI * 2);
@@ -526,14 +489,15 @@ export function drawHud(ctx, p, sc, best, opts = {}) {
   const phaseLabel = opts.phaseLabel || '';
   const coins = opts.coins != null ? opts.coins : 0;
 
-  // Top-left: portrait, hearts, coins, XP
+  // Top-left (right of the ☰ button): portrait, hearts, coins, XP
   ctx.save();
+  ctx.translate(70, 0);
   if (p) {
     ctx.fillStyle = 'rgba(24, 18, 12, 0.55)';
     ctx.beginPath();
     ctx.arc(34, 34, 26, 0, Math.PI * 2);
     ctx.fill();
-    if (!drawImageKey(ctx, 'player/portrait', 10, 10, 48, 48)) {
+    if (!drawImageKey(ctx, 'hero/portrait', 10, 10, 48, 48)) {
       ctx.fillStyle = '#3a6aa0';
       ctx.beginPath(); ctx.arc(34, 34, 20, 0, Math.PI * 2); ctx.fill();
     }
@@ -573,6 +537,7 @@ export function drawHud(ctx, p, sc, best, opts = {}) {
   }
 
   // Top-right stage banner
+  ctx.translate(-70, 0);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(28, 22, 16, 0.55)';
@@ -688,11 +653,15 @@ export function levelUpHitTest(clientY, rect, choices) {
 }
 
 export function drawIdleDecor(ctx, t) {
-  const cam = { x: (t * 14) % 400, y: 40 };
-  drawBackground(ctx, cam);
-  drawLevelVista(ctx, {
-    vista: { key: 'bg/forgegate', x: 0, y: 40, w: 1600, h: 900 },
-  }, cam);
+  const L = getLevelById('forgegate-fields');
+  const span = Math.max(1, L.bounds.maxX - W);
+  const k = (Math.sin(t * 0.05) + 1) / 2;
+  const cam = { x: Math.round(k * span), y: Math.round(L.bounds.maxY - H) };
+  drawCliffsBackground(ctx, cam);
+  drawStamps(ctx, L.tiles, cam, 'back');
+  drawStamps(ctx, L.tiles, cam, 'mid');
+  drawTiles(ctx, L.tiles, cam);
+  drawStamps(ctx, L.tiles, cam, 'front');
 }
 
 export function drawLoading(ctx) {
@@ -715,15 +684,6 @@ export function drawGate(ctx, gate, cam, open) {
   const y = wy(gy, cam);
   if (x < -80 || x > W + 80) return;
   ctx.save();
-  if (drawImageKey(ctx, 'prop/gate', x - 8, y - gh, gw + 16, gh)) {
-    if (open) {
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = '#7dffa0';
-      ctx.fillRect(x, y - gh, gw, gh);
-    }
-    ctx.restore();
-    return;
-  }
   ctx.fillStyle = open ? 'rgba(201, 162, 39, 0.85)' : 'rgba(50, 44, 40, 0.95)';
   ctx.fillRect(x, y - gh, 8, gh);
   ctx.fillRect(x + gw - 8, y - gh, 8, gh);
@@ -804,13 +764,31 @@ export function drawSession(ctx, session, t, stick, bestScore) {
 
   if (session.screen === 'menu' || session.screen === 'select' || session.screen === 'allocate') {
     drawIdleDecor(ctx, t);
+  } else if (inWorld && session.player && session.level?.tiles) {
+    const pc = { x: Math.round(cam.x), y: Math.round(cam.y) };
+    const tiles = session.level.tiles;
+    drawCliffsBackground(ctx, pc);
+    drawStamps(ctx, tiles, pc, 'back');
+    drawStamps(ctx, tiles, pc, 'mid');
+    drawTiles(ctx, tiles, pc);
+    drawLaddersPixel(ctx, session.ladders, pc);
+    if (session.level.gate) {
+      session.gateLift = clamp((session.gateLift || 0) + (session.isGateOpen?.() ? 0.02 : -0.05), 0, 1);
+      drawPixelGate(ctx, session.level.gate, pc, session.gateLift);
+    }
+    drawFlags(ctx, session.level.checkpoints, pc, session.reachedCheckpoints, session.activeCheckpoint?.id || null, t);
+    drawPickups(ctx, session.pickups, pc, t);
+    for (const c of session.coins) drawCoin(ctx, c, t, pc);
+    for (const e of session.enemies) drawEnemy(ctx, e, pc, t);
+    drawPlayer(ctx, session.player, t, pc, session.stats);
+    drawEffects(ctx, session.effects, pc);
+    drawStamps(ctx, tiles, pc, 'front');
+    drawParticles(ctx, session.particles, pc);
+    drawPopups(ctx, session.popups, pc);
   } else if (inWorld && session.player) {
     drawBackground(ctx, cam);
-    drawLevelVista(ctx, session.level, cam);
     drawPlatforms(ctx, session.platforms, cam);
-    if (!session.level?.vista) {
-      drawLadders(ctx, session.ladders, cam);
-    }
+    drawLadders(ctx, session.ladders, cam);
     drawProps(ctx, session.level?.props, cam);
     if (session.levelPhase === 'explore') {
       drawCheckpoints(
@@ -820,29 +798,33 @@ export function drawSession(ctx, session, t, stick, bestScore) {
         session.reachedCheckpoints,
         session.activeCheckpoint?.id || null,
       );
-      if (!session.level?.vista) {
-        drawGate(
-          ctx,
-          session.level?.gate || session.getGateX?.() || session.level?.gateX,
-          cam,
-          session.isGateOpen?.() ?? false,
-        );
-      }
+      drawGate(
+        ctx,
+        session.level?.gate || session.getGateX?.() || session.level?.gateX,
+        cam,
+        session.isGateOpen?.() ?? false,
+      );
     }
     if (session.levelPhase === 'boss') {
       drawArenaBounds(ctx, session.arena, cam);
     }
     for (const c of session.coins) drawCoin(ctx, c, t, cam);
     for (const e of session.enemies) drawEnemy(ctx, e, cam, t);
-    if (session.player) drawPlayer(ctx, session.player, t, cam, session.stats);
+    drawPlayer(ctx, session.player, t, cam, session.stats);
+    drawEffects(ctx, session.effects, cam);
     drawParticles(ctx, session.particles, cam);
-
+    drawPopups(ctx, session.popups, cam);
+  }
+  if (inWorld && session.player && session.screen !== 'select' && session.screen !== 'allocate') {
     let stageLabel = session.level
       ? `STAGE ${session.level.order}: ${session.level.name.toUpperCase()}`
       : ('STAGE ' + (session.wave || 1));
     let phaseLabel = '';
     if (session.levelPhase === 'boss') phaseLabel = 'The Iron Warden';
     else if (session.isGateOpen?.()) phaseLabel = 'Gate open';
+    else if (session.allEncountersFired?.() && session.enemies.length) {
+      phaseLabel = `Defeat ${session.enemies.length} more ${session.enemies.length === 1 ? 'foe' : 'foes'} to open the gate`;
+    }
     else if (session.activeCheckpoint) phaseLabel = 'Checkpoint';
     if (session.meta?.ngPlus > 0) stageLabel += `  ·  NG+${session.meta.ngPlus}`;
 
@@ -859,8 +841,6 @@ export function drawSession(ctx, session, t, stick, bestScore) {
       },
     );
     if (session.screen === 'play' || session.screen === 'levelup') drawControls(ctx, stick);
-  } else {
-    drawIdleDecor(ctx, t);
   }
   ctx.restore();
 }
