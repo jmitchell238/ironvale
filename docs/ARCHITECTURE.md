@@ -1,221 +1,91 @@
-# Ironvale — Architecture
+# Architecture
 
-Clean, layered architecture for a hopeful 2D action-platformer.
+Ironvale is plain ES modules with no build step. `index.html` loads `js/app/main.js`, which imports everything else. The game draws to a 960×540 canvas that's letterboxed to fit the screen.
 
-**Version:** 2.0.000 · **Entry:** `js/app/main.js` (ES modules) · **Tests:** `npm test` / `node tests/run.mjs`
-
----
-
-## 1. Purpose
-
-| | |
-|--|--|
-| **Pitch** | Apprentice knight: explore, climb, fight, open the gate toward a brighter vale. |
-| **Product direction** | Four biomes → Iron Warden; persistent forge training **between stages**. |
-| **Current loop** | Level select → explore (ladders, encounters) → locked gate → (boss on L4) → clear/fail. |
-| **Feel targets** | Landscape camera, climb, duck, double jump, telegraphed goblin/skeleton melee, contact bats, shield block. |
-
----
-
-## 2. Layer diagram
+## Layers
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  app/main.js          Composition root (DOM, loop)      │
-└───────────────────────────┬─────────────────────────────┘
-                            │ uses
-┌───────────────────────────▼─────────────────────────────┐
-│  adapters/            Outside world                      │
-│    render.js · input.js · sprites.js · audio.js · save.js│
-└───────────────────────────┬─────────────────────────────┘
-                            │ drives / reads
-┌───────────────────────────▼─────────────────────────────┐
-│  world/GameSession.js   Mutable run state (thin facade)  │
-│  world/systems/         player · combat · enemy ·        │
-│                         camera · level                   │
-└───────────────────────────┬─────────────────────────────┘
-                            │ calls pure functions
-┌───────────────────────────▼─────────────────────────────┐
-│  domain/              Game rules (no DOM, no globals)    │
-│    combat · enemyAi · platforms · player · upgrades      │
-│    levels · rpg       Campaign stages + persistent attrs │
-└───────────────────────────┬─────────────────────────────┘
-                            │ reads
-┌───────────────────────────▼─────────────────────────────┐
-│  config/              Numbers only                       │
-│  core/math.js         clamp, lerp, hits, canvas resize   │
-└─────────────────────────────────────────────────────────┘
+app/main.js        DOM, screens, the animation loop
+   ↓
+adapters/          Rendering, input, sprites, audio, saving
+   ↓
+world/             GameSession and its systems: the state of the current run
+   ↓
+domain/            Game rules as pure functions: no DOM, no globals
+   ↓
+config/, core/     Tuning numbers and math helpers
 ```
 
-**Dependency rule:** arrows only point **down**. Domain never imports adapters or app. Config never imports domain.
+Each layer only imports from the layers below it. `domain/` never imports from `world/`, `adapters/` or `app/`, which is what lets the tests run the rules in Node without a browser.
 
----
+## Files
 
-## 3. Directory map
+| Path | Contents |
+|------|----------|
+| `js/app/main.js` | Startup, menu and screen switching, the frame loop, wiring buttons to the session |
+| `js/adapters/render.js` | Draws the current session. Reads game state but never changes it. |
+| `js/adapters/input.js` | Keyboard, the touch stick, and the JUMP and ATK buttons |
+| `js/adapters/sprites.js` | Loading and drawing sprite sheets |
+| `js/adapters/audio.js` | Web Audio sound effects |
+| `js/adapters/save.js` | Reading and writing progress in localStorage |
+| `js/world/GameSession.js` | The `GameSession` class, which owns everything about the current run |
+| `js/world/systems/player.js` | Player movement, getting hurt, invulnerability frames |
+| `js/world/systems/combat.js` | Sword hits, kills, granting XP |
+| `js/world/systems/enemy.js` | Spawning enemies, running their AI, contact damage |
+| `js/world/systems/camera.js` | Camera follow and limits |
+| `js/world/systems/level.js` | Stage bounds, triggering fights, checkpoints, the gate, the boss arena |
+| `js/domain/levels.js` | Stage definitions: platforms, ladders, fights, checkpoints, gate, boss |
+| `js/domain/player.js` | Player creation and movement physics |
+| `js/domain/combat.js` | Sword hitbox, swing timing, resolving hits, shield blocking |
+| `js/domain/enemyAi.js` | Patrolling without walking off ledges, chasing, attacking |
+| `js/domain/platforms.js` | Platform layout helpers, including checking that jumps are possible |
+| `js/domain/rpg.js` | XP, levels, stats, stage unlocks, New Game+ |
+| `js/domain/upgrades.js` | Turns stats into combat numbers |
+| `js/config/index.js` | `GAME_VERSION` and all tuning: player body, movement, sword, drawing, enemies, NG+ scaling |
+| `js/core/math.js` | `clamp`, `lerp`, hit tests, canvas resizing |
+| `sw.js`, `manifest.webmanifest` | Offline cache and PWA install |
+| `tests/run.mjs` | Tests |
 
-```
-js/
-  app/
-    main.js              Boot, screens, rAF loop, wire session ↔ UI
-  adapters/
-    render.js            Draw session snapshot (no mutation)
-    input.js             Keyboard + virtual stick
-    sprites.js           Load / draw sheets
-    audio.js             Web Audio beeps
-    save.js              localStorage
-  world/
-    GameSession.js       One class owns the run (thin facade)
-    systems/
-      player.js          Movement, hurt, invuln
-      combat.js          Melee, kills, XP grant
-      enemy.js           Spawn, AI tick, contact damage
-      camera.js          Follow + clamp
-      level.js           Bounds, encounters, gate, boss arena
-  domain/
-    combat.js            Sword hitbox, swing, resolve hits
-    enemyAi.js           Ledge-safe patrol / aggro / integrate
-    platforms.js         Jump-safe layout + procgen helpers
-    player.js            Factory + body helpers + movement
-    upgrades.js          Combat stats factory (blessings retired)
-    rpg.js               Persistent XP / attrs / unlock (between levels)
-    levels.js            Stage defs: bounds, platforms, encounters, gate, boss
-  config/
-    index.js             PLAYER_BODY / MOVE / SWORD / DRAW, enemies
-  core/
-    math.js              Pure utilities
-```
+## GameSession
 
-Legacy flat files (`js/game.js`, etc.) were **removed**.
-
----
-
-## 4. Concern isolation (critical)
-
-| Want to change… | Edit | Must not affect |
-|-----------------|------|-----------------|
-| Sword **length** | `PLAYER_SWORD.attackRange` + `domain/combat.js` | `PLAYER_BODY` feet size |
-| Character **collision** | `PLAYER_BODY.w/h` | Sword range |
-| Sprite **looks bigger** | `PLAYER_DRAW.drawScale` | Physics / hitboxes |
-| Jump feel | `PLAYER_MOVE` + `domain/player.js` | Combat |
-| Enemy ledge brain | `ENEMY_AI` + `domain/enemyAi.js` | Sword |
-| HUD / VFX | `adapters/render.js` | Domain math |
-| Save schema | `adapters/save.js` | Domain |
-
-Tests in `tests/run.mjs` section **“sword ≠ body”** lock the body/sword split.
-
----
-
-## 5. GameSession (world layer)
-
-Single source of run mutation; systems do the work:
+`GameSession` is the only thing that changes run state. The app creates one, passing in the audio and save adapters (the tests pass stand-ins), and calls `update()` once per frame:
 
 ```js
 const session = new GameSession({ audio, save });
-session.loadLevel('forgegate-fields'); // or startRun(levelId)
+session.loadLevel('forgegate-fields');
 session.update(dt, { x, y, jump, attack });
-// session.screen: 'menu' | 'select' | 'play' | 'allocate' | 'clear' | 'over'
-// session.levelPhase: 'explore' | 'boss' | 'done'
-// session.meta: { xp, level, unspentPoints, stats, levelUnlocked }
 ```
 
-- Injects **audio** and **save** adapters (testable with no-ops).
-- **Systems** under `world/systems/` receive the session and mutate run state.
-- Domain modules receive plain objects + config; they do not know about DOM.
-- Render reads session fields (or `snapshot()`); it never writes score/HP.
-- **Level APIs:** `loadLevel`, `getPlayerBounds` / `getCameraBounds`, `getGateX`, `isGateOpen`, `enterBossArena`, `clearLevel`, `getNextLevel`.
-- Public session methods stay stable for app + tests; implementation lives in systems.
+The work is done by the modules in `world/systems/`, which receive the session. They call into `domain/` for the actual rules.
 
----
+Useful fields:
 
-## 6. Runtime screens
+- `session.screen`: `menu`, `select`, `play`, `levelup`, `allocate`, `clear` or `over`
+- `session.levelPhase`: `explore`, `boss` or `done`
+- `session.meta`: saved progress (`xp`, `level`, `unspentPoints`, `stats`, `levelUnlocked`, `ngPlus`, `campaignCleared`)
+
+## Screens
 
 ```
-menu ──Campaign──► select ──pick unlocked──► play
-                                         │
-                    death ──► over ──Retry──► play
-                                         │
-                    XP mid-stage ── banks unspent points (no pause)
-                                         │
-                    boss down ──► allocate? ──► clear ──Next──► play
-                         (if unspent)      └──Menu──► menu
+menu → select → play ──(die)──→ over → continue from checkpoint, or retry
+                  │
+                  └──(clear stage)──→ allocate (if you have points) → clear → next stage or menu
 ```
 
----
+Leveling up during a stage only banks a point. Points are spent on the `allocate` screen between stages.
 
-## 7. Testing
+## Stages
 
-```bash
-npm test
-# or
-node tests/run.mjs
-```
+Stages are plain objects in `js/domain/levels.js`. Each has bounds, a spawn point, platforms, ladders, encounters, checkpoints, a gate, and optionally a boss. An encounter is a trigger X position plus a list of enemies to spawn when the player passes it. The gate opens once every encounter has fired and no enemies are left. On a stage with a boss, the boss spawns in an arena past the gate.
 
-Imports real ES modules (no VM string concat):
+## Body, sword and drawing are separate
 
-1. **Pure domain** — combat, AI, config splits (no session)
-2. **Session integration** — `GameSession` with mock audio/save
-3. **Shell** — HTML module entry, SW cache ↔ `GAME_VERSION`
+These are tuned independently, and the "sword ≠ body" tests in `tests/run.mjs` make sure they stay that way:
 
-Not covered: browser pixels, touch hardware, PWA install UI.
-
----
-
-## 8. How to add features (recipes)
-
-### Longer sword only
-1. `js/config/index.js` → `PLAYER_SWORD.attackRange`
-2. Run `npm test` — body tests must still pass
-3. Optional: tweak slash FX in `adapters/render.js` (presentation)
-
-### New enemy behavior
-1. Pure logic in `domain/enemyAi.js` (or new `domain/enemies/bandit.js`)
-2. Spawn/tuning in `config` + `GameSession.spawnEnemy`
-3. Unit-test AI without canvas
-
-### Campaign level (P1 done shell; P2 fills content; P4 = 10 stages)
-1. Edit `domain/levels.js` — platforms, encounters, checkpoints, gate, boss arena
-2. `GameSession.loadLevel` seeds state; do **not** put layout in `render.js`
-3. Clear/fail/select screens live in `index.html` + `app/main.js`
-4. Optional `checkpoints: [{ id, x }]` — death continue via over-screen
-
-### Persistent RPG stats (P3 done)
-1. `domain/rpg.js` — XP, bank points, allocate STR/VIT/SPD/AGI/DEX/Reach
-2. Save: `xp`, `level`, `unspentPoints`, `stats`, `levelUnlocked`, `ngPlus`, `campaignCleared`
-3. Blessing cards retired; allocate only between stages (clear → allocate → next)
-4. New Game+ after L10 clear: keep hero RPG, reset stage unlocks, scale enemy HP/dmg
-
----
-
-## 9. Product roadmap (status)
-
-| Phase | Status | Notes |
-|-------|--------|--------|
-| **P0 Feel** | Done | Longsword, jump attack, ledge AI |
-| **Architecture** | Done (v1.1) | Layers + ES modules + GameSession |
-| **P1 Level shell** | Done (v1.2) | Finite stages, gate, boss arena, clear/fail, select |
-| **P2 L1 Outer Vale** | Done (v1.2.100) | Teaching layout, slimes + light bandits, bandit captain |
-| **P2 L2 Ruined Road** | Done (v1.2.200) | Tighter platforms, skeletons, skeleton champion |
-| **P2 L3 Iron Gate** | Done (v1.2.300) | Ogres + war-chief telegraphed slams, campaign clear |
-| **P3 RPG** | Done (v1.3.000) | Persistent XP + attrs between levels only |
-| **Polish melee telegraphs** | Done (v1.3.100) | Bandit/skeleton/ogre/boss windups; slime contact-only |
-| **P1b systems extract** | Done (v1.3.200) | `world/systems/*` — thin GameSession facade |
-| **P4 Scale + polish** | Done (v1.4.000) | 10 stages, checkpoints, hitstop juice, New Game+ |
-| **Feel + art** | Done (v1.4.100) | Safe spawns, duck + double-jump, readable platforms, Mario-style L1 |
-| **Rethink 2.0** | Done (v2.0.000) | Landscape 960×540, 2-axis camera, ladders, 4 biomes, Forgegate Fields, painted apprentice knight |
-
----
-
-## 10. Local play
-
-```bash
-python3 -m http.server 8080
-# open http://localhost:8080
-```
-
-ES modules require HTTP (not `file://`).
-
----
-
-## 11. Versioning
-
-Bump `GAME_VERSION` in `js/config/index.js` **and** `CACHE` name in `sw.js` together. Tests enforce the match.
+| To change | Edit | Doesn't affect |
+|-----------|------|----------------|
+| Sword length | `PLAYER_SWORD.attackRange` | Collision box |
+| Collision box | `PLAYER_BODY.w` / `h` | Sword range |
+| How big the knight looks | `PLAYER_DRAW.drawScale` | Physics or hitboxes |
+| Jump feel | `PLAYER_MOVE` and `domain/player.js` | Combat |
+| Enemy ledge behavior | `ENEMY_AI` and `domain/enemyAi.js` | The sword |

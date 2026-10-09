@@ -2,33 +2,62 @@
 
 Small knight. A greater tomorrow.
 
-A 2D action platformer. You play an apprentice knight who explores, climbs and fights through four stages to reach the Iron Warden.
+A 2D action platformer. You play an apprentice knight who runs, climbs ladders and fights goblins, bats and shield skeletons on the way to the Iron Warden. Between stages you train at the forge to get stronger.
 
 Play at https://jmitchell238.github.io/ironvale/
 
-You can install it as an app from the browser (Add to Home Screen on iPhone and iPad).
+You can install it as an app from the browser (Add to Home Screen on iPhone and iPad). It plays in landscape.
 
 ## Controls
 
-| Input | Action |
-|-------|--------|
-| Left stick / A D / ← → | Run |
-| W / ↑ on a ladder | Climb |
-| JUMP / Space | Jump (press again in air = double jump) |
-| S / ↓ | Duck |
-| ATK / J / F / Shift | Sword slash |
-| 1–6 | Train attributes at the forge (between stages) |
-| Esc | Menu |
+| Action | Keyboard | Touch |
+|--------|----------|-------|
+| Run | A D / ← → | Left stick |
+| Climb a ladder | W S / ↑ ↓ | Stick up or down |
+| Jump (press again in the air to double jump) | Space / W / ↑ | JUMP |
+| Duck | S / ↓ | Stick down |
+| Sword | J / K / F / Shift | ATK |
+| Pick a stat at the forge | 1–6 | Tap |
+| Menu | Esc | ☰ |
 
-## Campaign
+## How it plays
 
-1. Forgegate Fields: the tutorial stage, with ruins, ladders, goblins, bats, shield skeletons and a locked gate
+Each stage is a side-scrolling level with platforms and ladders. Walking past certain points starts a fight. The gate at the end of the stage stays shut until every fight in the stage is won. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage.
+
+- Goblins and shield skeletons wind up before they swing, so you can see attacks coming. Shield skeletons block hits from the front.
+- Bats hurt you if they touch you.
+- The Iron Warden, at the end of the last stage, has a telegraphed ground slam.
+
+## Getting stronger
+
+Defeating enemies earns XP. Each level up gives you a point to spend at the forge, between stages:
+
+| Stat | Effect |
+|------|--------|
+| STR | Sword damage |
+| VIT | Max HP |
+| SPD | Run speed |
+| AGI | Jump height |
+| DEX | Attack speed |
+| REACH | Sword range |
+
+Your stats carry over from stage to stage and are saved on the device.
+
+After you beat the Iron Warden, New Game+ appears on the menu. It keeps your knight's stats, locks the stages again, and makes enemies tougher each cycle (+35% HP and +15% damage per cycle).
+
+## Stages
+
+1. Forgegate Fields
 2. Forest Ramparts
 3. Forge Ruins
-4. Iron Caverns, ending with the boss, the Iron Warden
+4. Iron Caverns, with the Iron Warden
 
-Clear each stage's fights to open its end gate. Flags are checkpoints. Leveling up earns forge points, which you spend at the forge between stages.
+Forgegate Fields is the only stage with a finished layout so far. The other three use a placeholder layout; see [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Credits
+
+The knight, enemies, tiles and backgrounds were made from Ironvale concept art. Details are in [assets/CREDITS.md](assets/CREDITS.md).
 
 ## Development
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for running it locally, tests and versioning, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is organized.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for running it locally, tests, versioning and common changes, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is organized.
