@@ -1,4 +1,4 @@
-const CACHE = 'ironvale-2.2.002';
+const CACHE = 'ironvale-2.3.000';
 
 const ASSETS = [
   './', './index.html', './css/style.css',
