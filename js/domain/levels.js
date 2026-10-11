@@ -3,7 +3,8 @@
  * Layout/spawns live here — not in render.
  *
  * Campaign (4 biomes): Forgegate Fields → Forest Ramparts → Forge Ruins → Iron Caverns.
- * All four are tile-map stages (see tilemap.js); Iron Caverns ends in the Iron Warden's throne room.
+ * All four are tile-map stages (see tilemap.js); each ends in a boss arena past its gate: the Nightmare,
+ * the Hell Beast, the angel and the Iron Warden.
  */
 
 import { GROUND_Y, W, H } from '../config/index.js';
@@ -40,6 +41,8 @@ import {
  *     arenaMaxX: number,
  *     spawnX: number,
  *     spawnY?: number,
+ *     floorY?: number,
+ *     camY?: number,
  *   },
  *   clearBonus: number,
  * }} LevelDef
@@ -138,7 +141,7 @@ function encounter(id, lead, enemies) {
 }
 
 function buildForgegateFields() {
-  const map = createTileMap(180, 22, 'cliffs');
+  const map = createTileMap(208, 22, 'cliffs');
   map.extraPlatforms = [];
 
   // A — sunny meadow: spawn, a step, a teaching skeleton
@@ -201,10 +204,14 @@ function buildForgegateFields() {
   map.pickups.push({ type: 'heart', c: 149, r: 5 });
   standStamp(map, 'fern', 135, 15);
 
-  // G — the gate field: last fight, then the Forgegate
-  groundCells(map, 153, 179, 14);
-  fillCells(map, 178, 0, 179, 13, '#');
+  // G — the gate field: last fight, then the Forgegate and the Nightmare's arena (flat, open to the sky, walled on the right)
+  groundCells(map, 153, 205, 14);
+  fillCells(map, 206, 0, 207, 21, '#');
   standStamp(map, 'tree', 154, 14);
+  standStamp(map, 'pillar', 178, 14);
+  standStamp(map, 'pillar', 203, 14);
+  standStamp(map, 'fern', 190, 14);
+  standStamp(map, 'fern', 197, 14);
   coinArc(map, 158, 163, 12, 1);
 
   const compiled = compileTileMap(map);
@@ -223,7 +230,7 @@ const FORGEGATE_FIELDS = {
   theme: FG_MAP.tiles.theme,
   tiles: FG_MAP.tiles,
   solids: FG_MAP.solids,
-  bounds: { minX: 0, maxX: 180 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
+  bounds: { minX: 0, maxX: 208 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
   spawn: foot(4, 17),
   platforms: FG_MAP.platforms,
   ladders: FG_MAP.ladders,
@@ -260,14 +267,23 @@ const FORGEGATE_FIELDS = {
   checkpoints: [
     { id: 'fg-field', ...foot(73, 14) },
     { id: 'fg-steps', ...foot(134, 15) },
+    { id: 'fg-gate', ...foot(172, 14) },
   ],
   gateX: 175 * TILE,
   gate: { x: 174 * TILE, y: 14 * TILE - 128, w: 64, h: 128, blockTop: 0 },
+  // The arena's walls are the gate on the left and solid rock on the right.
+  boss: {
+    type: 'nightmare',
+    arenaMinX: 176 * TILE,
+    arenaMaxX: 206 * TILE,
+    spawnX: 200 * TILE,
+    spawnY: 14 * TILE,
+  },
   clearBonus: 160,
 };
 
 function buildForestRamparts() {
-  const map = createTileMap(190, 22, 'swamp');
+  const map = createTileMap(218, 22, 'swamp');
 
   // A — mire edge: spawn, a step up, the first pit (3 wide), two skeletons
   fillCells(map, 0, 7, 0, 21, '#');
@@ -332,14 +348,19 @@ function buildForestRamparts() {
   standStamp(map, 'root', 148, 8);
   standStamp(map, 'bush', 158, 8);
 
-  // F — drop to the gate field: last fight, then the Forest Gate
-  groundCells(map, 161, 189, 16);
-  fillCells(map, 188, 0, 189, 15, '#');
+  // F — drop to the gate field: last fight, then the Forest Gate and the Hell Beast's bog (flat, walled on the right)
+  groundCells(map, 161, 215, 16);
+  fillCells(map, 216, 0, 217, 21, '#');
   fillCells(map, 166, 13, 169, 13, '=');
   coinRow(map, 166, 169, 12);
   coinArc(map, 172, 177, 14, 1);
   standStamp(map, 'tuft', 163, 16);
   standStamp(map, 'bush', 181, 16);
+  standStamp(map, 'bush', 189, 16);
+  standStamp(map, 'tuft', 196, 16);
+  standStamp(map, 'root', 203, 16);
+  standStamp(map, 'tuft', 211, 16);
+  standStamp(map, 'bush', 213, 16);
 
   return compileTileMap(map);
 }
@@ -355,7 +376,7 @@ const FOREST_RAMPARTS = {
   theme: FR_MAP.tiles.theme,
   tiles: FR_MAP.tiles,
   solids: FR_MAP.solids,
-  bounds: { minX: 0, maxX: 190 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
+  bounds: { minX: 0, maxX: 218 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
   spawn: foot(4, 17),
   platforms: FR_MAP.platforms,
   ladders: FR_MAP.ladders,
@@ -411,14 +432,22 @@ const FOREST_RAMPARTS = {
   checkpoints: [
     { id: 'fr-rampart', ...foot(91, 12) },
     { id: 'fr-climb', ...foot(134, 14) },
+    { id: 'fr-gate', ...foot(182, 16) },
   ],
   gateX: 185 * TILE,
   gate: { x: 184 * TILE, y: 16 * TILE - 128, w: 64, h: 128, blockTop: 0 },
+  boss: {
+    type: 'hell_beast',
+    arenaMinX: 186 * TILE,
+    arenaMaxX: 216 * TILE,
+    spawnX: 209 * TILE,
+    spawnY: 16 * TILE,
+  },
   clearBonus: 220,
 };
 
 function buildForgeRuins() {
-  const map = createTileMap(200, 22, 'town');
+  const map = createTileMap(227, 22, 'town');
   const STREET = 17;
 
   // A — the town gate street: spawn, two skeletons, a first look at the houses
@@ -495,9 +524,14 @@ function buildForgeRuins() {
   coinRow(map, 175, 177, 6);
   coinRow(map, 180, 182, 4);
 
-  // G — down from the tower to the gate floor: last fight, then the Forge Gate
-  groundCells(map, 186, 199, 15);
-  fillCells(map, 198, 0, 199, 14, '#');
+  // G — down from the tower to the gate floor: last fight, then the Forge Gate and the angel's nave
+  // (flat, a low vault overhead, walled on the right)
+  groundCells(map, 186, 224, 15);
+  fillCells(map, 195, 0, 224, 2, '#');
+  fillCells(map, 225, 0, 226, 21, '#');
+  standStamp(map, 'balustrade', 199, 15);
+  standStamp(map, 'balustrade', 207, 15);
+  standStamp(map, 'balustrade', 215, 15);
   coinArc(map, 189, 193, 13, 1);
 
   return compileTileMap(map);
@@ -514,7 +548,7 @@ const FORGE_RUINS = {
   theme: FRU_MAP.tiles.theme,
   tiles: FRU_MAP.tiles,
   solids: FRU_MAP.solids,
-  bounds: { minX: 0, maxX: 200 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
+  bounds: { minX: 0, maxX: 227 * TILE, minY: 0, maxY: 22 * TILE, fallY: 22 * TILE + 80 },
   spawn: foot(4, 17),
   platforms: FRU_MAP.platforms,
   ladders: FRU_MAP.ladders,
@@ -580,9 +614,20 @@ const FORGE_RUINS = {
   checkpoints: [
     { id: 'fru-hall', ...foot(93, 17) },
     { id: 'fru-nave', ...foot(149, 13) },
+    { id: 'fru-gate', ...foot(191, 15) },
   ],
   gateX: 194 * TILE,
   gate: { x: 193 * TILE, y: 15 * TILE - 128, w: 64, h: 128, blockTop: 0 },
+  // She hovers over the nave and lands on its floor (floorY).
+  boss: {
+    type: 'angel',
+    arenaMinX: 195 * TILE,
+    arenaMaxX: 225 * TILE,
+    spawnX: 216 * TILE,
+    spawnY: 15 * TILE - 170,
+    floorY: 15 * TILE,
+    camY: 60, // keeps her wings in view above the nave floor
+  },
   clearBonus: 280,
 };
 

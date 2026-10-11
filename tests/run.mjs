@@ -62,6 +62,12 @@ function createSession(saveSeed = {}) {
   });
 }
 
+/** Kill the stage boss (the stage clears when it falls). */
+function killBoss(s) {
+  const boss = s.enemies.find(e => e.isBoss);
+  s.killEnemy(boss, s.enemies.indexOf(boss));
+}
+
 // ---------------------------------------------------------------------------
 section('PWA shell + architecture layout');
 {
@@ -322,7 +328,7 @@ section('level shell data');
   assert(levels.getLevelById('iron-caverns'), 'L4');
   const L1 = levels.getLevelById('forgegate-fields');
   assert(L1.bounds.maxX > L1.gateX, 'bounds past gate');
-  assert(!L1.boss, 'L1 has no in-stage boss');
+  assertEq(L1.boss.type, 'nightmare', 'L1 ends with the Nightmare');
   assert(L1.ladders?.length >= 2, 'L1 ladders');
   assert(L1.bounds.minY != null && L1.bounds.maxY > L1.bounds.minY, 'vertical bounds');
   assert(levels.buildLevelPlatforms(L1).length >= 6, 'platforms');
@@ -338,7 +344,7 @@ section('Forgegate Fields (L1)');
   const { ENEMIES, enemyIsBoss, HEART } = config;
   const L = levels.getLevelById('forgegate-fields');
   assert(L && !L.stub, 'not stub');
-  assert(!L.boss, 'no L1 boss');
+  assertEq(L.boss.type, 'nightmare', 'L1 boss');
   assert(enemyIsBoss('iron_warden'), 'warden is boss');
   assert(ENEMIES.iron_warden.hp >= 300, 'warden tanky');
   assertEq(HEART, 25, 'heart size');
@@ -378,7 +384,7 @@ section('loadLevel + landscape camera + no endless waves');
   assertEq(s.wave, 1, 'no wave ramp');
 }
 
-section('ladders + locked gate + L1 clear (no boss)');
+section('ladders + locked gate + L1 clear (boss first)');
 {
   const { findLadderAt } = platforms;
   const s = createSession();
@@ -395,13 +401,16 @@ section('ladders + locked gate + L1 clear (no boss)');
   s.update(0.2, { x: 0, y: -1, jump: false, attack: false });
   assert(s.player.y < y0, 'climbs up');
 
-  // Fire encounters, open gate, walk in → clear (no boss)
+  // Fire encounters, open gate, walk in → the boss arena; the stage clears when the boss falls
   s.enemies.length = 0;
   for (const enc of L.encounters) s.firedEncounters.add(enc.id);
   assert(s.isGateOpen(), 'gate open');
   s.player.x = L.gateX + 10;
   s.updateLevelProgress();
-  assert(s.screen === 'allocate' || s.screen === 'clear' || s.levelPhase === 'done', 'cleared via gate');
+  assertEq(s.levelPhase, 'boss', 'the gate leads to the boss');
+  assert(s.screen === 'play', 'not cleared yet');
+  killBoss(s);
+  assert(s.screen === 'allocate' || s.screen === 'clear' || s.levelPhase === 'done', 'cleared when the boss falls');
 }
 
 section('encounters + L4 boss + campaign clear');
@@ -592,6 +601,7 @@ section('session RPG: allocate between levels + unlock + persist');
   for (const enc of s.level.encounters) s.firedEncounters.add(enc.id);
   s.player.x = s.level.gateX + 10;
   s.updateLevelProgress();
+  killBoss(s);
   assertEq(s.screen, 'allocate', 'allocate between levels');
   assert(s.meta.levelUnlocked >= 2, 'unlocked L2');
   assert(s.allocateAttr('str'), 'spend str');
@@ -820,7 +830,7 @@ for (const L of tileStages) {
     s.update(1 / 60, { x: 1, y: stuck > 40 ? -1 : 0, jump, attack: f % 14 === 0 });
     maxX = Math.max(maxX, s.player.x);
   };
-  for (let f = 0; f < 60 * 120 && s.screen === 'play'; f++) step(f);
+  for (let f = 0; f < 60 * 120 && s.screen === 'play' && s.levelPhase === 'explore'; f++) step(f);
   assert(maxX >= s.level.gate.x - 80, `bot reaches the gate (got ${Math.round(maxX)})`);
   assert(s.kills >= 6, 'bot fought its way through');
   if (L.boss) {
@@ -1318,6 +1328,730 @@ section('fire skull: hovers, telegraphs, dives on a locked line, returns');
   const sp = s.spawnEnemy('fire_skull', { x: s.player.x + 300, y: s.player.y - 150 });
   assert(sp && sp.swoops && sp.fly, 'spawned skull swoops');
 }
+
+// ---------------------------------------------------------------------------
+// Stage bosses: arenas (stages 1-3), then each boss's moves without the canvas.
+const BOSS_STAGES = [
+  { id: 'forgegate-fields', type: 'nightmare', flying: false },
+  { id: 'forest-ramparts', type: 'hell_beast', flying: false },
+  { id: 'forge-ruins', type: 'angel', flying: true },
+];
+
+section('boss stats climb: Nightmare < Hell Beast < Angel < Iron Warden');
+{
+  const { ENEMIES, enemyIsBoss } = config;
+  const order = ['nightmare', 'hell_beast', 'angel', 'iron_warden'];
+  for (const t of order) {
+    assert(enemyIsBoss(t) && ENEMIES[t].label, `${t} is a named boss`);
+    assert(ENEMIES[t].drawScale >= 2 && Number.isInteger(ENEMIES[t].drawScale), `${t} is drawn at a whole-number scale`);
+  }
+  for (let i = 1; i < order.length; i++) {
+    assert(ENEMIES[order[i]].hp > ENEMIES[order[i - 1]].hp, `${order[i]} has more health than ${order[i - 1]}`);
+    assert(ENEMIES[order[i]].damage >= ENEMIES[order[i - 1]].damage - 4, `${order[i]} hits no softer than ${order[i - 1]}`);
+  }
+  assert(ENEMIES.nightmare.hp <= 200, 'the first boss is quick to beat');
+  // NG+ scales a boss like any other enemy
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  const base = s.spawnEnemy('angel', { x: 5000, y: 300, isBoss: true });
+  s.enemies.length = 0;
+  s.meta.ngPlus = 2;
+  const ng = s.spawnEnemy('angel', { x: 5000, y: 300, isBoss: true });
+  assert(ng.hp > base.hp && ng.damage > base.damage, 'NG+ makes the angel tougher and harder-hitting');
+}
+
+for (const B of BOSS_STAGES) {
+  const L = levels.getLevelById(B.id);
+  section(`${L.name}: the ${config.ENEMIES[B.type].label} arena sits inside the stage on one flat floor`);
+  const b = L.boss;
+  assertEq(b.type, B.type, 'stage boss');
+  assert(b.arenaMinX >= L.bounds.minX && b.arenaMaxX <= L.bounds.maxX, 'arena inside the stage bounds');
+  assert(b.spawnX > b.arenaMinX + 24 && b.spawnX < b.arenaMaxX - 24, 'boss spawns inside the arena');
+  assert(b.arenaMaxX - b.arenaMinX >= config.W, 'arena is at least a screen wide');
+  assert(L.gate.x + L.gate.w <= b.arenaMinX && L.gateX < b.arenaMinX, 'the gate is the arena\'s left wall');
+  const plats = levels.buildLevelPlatforms(L);
+  const floorY = B.flying ? b.floorY : b.spawnY;
+  const floor = plats.find(p => b.spawnX >= p.x && b.spawnX <= p.x + p.w && Math.abs(p.y - floorY) < 1);
+  assert(floor, 'there is floor under the spawn point');
+  assert(floor.x <= b.arenaMinX && floor.x + floor.w >= b.arenaMaxX, 'one platform covers the whole arena floor');
+  const inArena = L.solids.filter(r => r.x + r.w > b.arenaMinX && r.x < b.arenaMaxX && r.y + r.h > floorY - 200 && r.y < floorY);
+  assertEq(inArena.length, 0, 'no walls or blocks standing in the arena floor space');
+  assert(L.solids.some(r => r.x <= b.arenaMaxX && r.x + r.w > b.arenaMaxX && r.y <= floorY - 300 && r.y + r.h >= floorY), 'solid rock closes the right side');
+  if (B.flying) assert(b.spawnY < b.floorY - 120, 'the flier starts in the air above the floor');
+  // A checkpoint just before the gate (like the throne room's)
+  const cp = L.checkpoints[L.checkpoints.length - 1];
+  assert(cp.x < L.gate.x && cp.x > L.gate.x - 400, 'a checkpoint shortly before the gate');
+
+  // Entering: the boss appears, the camera locks on the arena and the knight cannot go back out
+  const s = createSession();
+  s.loadLevel(B.id);
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  s.enemies.length = 0;
+  assert(!s.arena && s.getPlayerBounds().minX < b.arenaMinX, 'no arena before the gate');
+  s.player.x = L.gateX + 10;
+  s.player.y = floorY;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 'boss phase');
+  const boss = s.enemies.find(e => e.isBoss);
+  assert(boss && boss.type === B.type && boss.label, 'the boss appears with its name');
+  assert(Math.abs(boss.x - b.spawnX) < 1 && Math.abs(boss.y - b.spawnY) < 1, 'at the spawn point');
+  assertEq(boss.arenaMinX, b.arenaMinX, 'it knows the arena');
+  s.player.hp = s.player.maxHp = 9999;
+  for (let i = 0; i < 90; i++) s.update(1 / 60, { x: -1, y: 0, jump: false, attack: false });
+  assert(s.player.x >= b.arenaMinX && s.player.x <= b.arenaMinX + 40, 'the knight cannot walk back through the gate');
+  assert(Math.abs(s.cameraX - b.arenaMinX) < 1, 'the camera holds on the arena');
+  if (b.camY != null) assert(Math.abs(s.cameraY - b.camY) < 1, 'a flier\'s arena holds the camera up so she stays in view');
+  for (let i = 0; i < 400; i++) s.update(1 / 60, { x: 1, y: 0, jump: false, attack: false });
+  assert(s.player.x <= b.arenaMaxX && Math.abs(s.cameraX - b.arenaMinX) < 1, 'and stays put as the knight crosses it');
+  assert(!s.isGateOpen(), 'the gate is shut behind the knight for good');
+  killBoss(s);
+  assert(s.screen === 'allocate' || s.screen === 'clear', 'the stage clears when the boss falls');
+}
+
+// --- Nightmare ---------------------------------------------------------------
+section('Nightmare: telegraphed charge, run-up, skid, recovery, enrage');
+{
+  const { ENEMIES, ENEMY_CHARGE } = config;
+  const cfg = ENEMY_CHARGE.nightmare;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const floor = [{ x: 0, y: GROUND_Y, w: 6000, h: 40, ground: true }];
+  const mk = (x, extra = {}) => ({
+    type: 'nightmare', x, y: GROUND_Y, w: ENEMIES.nightmare.w, h: ENEMIES.nightmare.h, hp: ENEMIES.nightmare.hp,
+    maxHp: ENEMIES.nightmare.hp, speed: ENEMIES.nightmare.speed, damage: ENEMIES.nightmare.damage, vx: 0, vy: 0,
+    onGround: true, facing: -1, homeX: x, homeY: GROUND_Y, patrolMin: 24, patrolMax: 1976, arenaMinX: 0, arenaMaxX: 2000,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, isBoss: true, bossAi: 'charge', ...extra,
+  });
+  const kn = (x, y = GROUND_Y) => ({ x, y, w: PLAYER_BODY.w, h: PLAYER_BODY.h });
+  const run = (e, k, n, fn) => {
+    for (let i = 0; i < n; i++) {
+      const hit = aiUpdateEnemy(e, 1 / 60, k, floor, ENEMY_AI, phys);
+      if (fn) fn(i, hit);
+    }
+  };
+  assert(enemyUsesTelegraphedAttack(mk(100)) && !config.getEnemyMeleeCfg('nightmare'), 'it hurts only through its charge, not by contact');
+  assert(ENEMIES.nightmare.h < PLAYER_MOVE.jumpVel ** 2 / (2 * PLAYER_MOVE.gravity), 'its hitbox is lower than a single jump\'s peak');
+
+  // One full cycle, in order, with the warning held for the full wind-up
+  const e = mk(1800);
+  const k = kn(1000);
+  const seq = [];
+  const times = {};
+  let hits = 0;
+  run(e, k, 60 * 12, (i, hit) => {
+    if (hit) hits++;
+    if (seq[seq.length - 1] !== e.bossState) { seq.push(e.bossState); times[e.bossState] = times[e.bossState] || i / 60; }
+    if (e.bossState === 'windup') assertEq(e.vx, 0, 'it stands still while it rears');
+  });
+  assertEq(seq.slice(0, 5).join('>'), 'idle>windup>charge>skid>recover', 'idle, rear, charge, skid, recover in that order');
+  assertEq(seq[5], 'idle', 'and back to idle');
+  assert(!seq.slice(0, 2).includes('charge'), 'the warning comes before the first charge');
+  const w0 = mk(1800);
+  let wt = 0;
+  let started = false;
+  run(w0, k, 600, () => { if (w0.bossState === 'windup') { started = true; wt += 1 / 60; } });
+  assert(started && wt >= cfg.windup - 0.05, 'the rear lasts the full wind-up');
+  assert(hits >= 1, 'a knight who stands still is hit by the charge');
+
+  // It faces the knight when it rears and runs the way it faced
+  const f = mk(1800);
+  run(f, kn(1000), 60);
+  assertEq(f.bossState, 'windup', 'rearing');
+  assertEq(f.facing, -1, 'facing the knight');
+  let peak = 0;
+  run(f, kn(1000), 60 * 3, () => { peak = Math.max(peak, Math.abs(f.vx)); });
+  assert(Math.abs(peak - cfg.speed) < 5, 'it reaches full speed');
+  assert(f.chargeDir === -1, 'the charge went toward the knight\'s side');
+
+  // The run-up: a close knight makes it back off to the far side before rearing
+  const r = mk(1000);
+  const x0 = r.x;
+  run(r, kn(900), 70);
+  assert(r.x > x0 && r.bossState === 'idle', 'it backs away from a close knight');
+  assertEq(r.facing, 1, 'turned to trot off');
+  run(r, kn(900), 60 * 6);
+  assert(r.chargeDir === -1, 'then it charges back at the knight');
+
+  // It runs the whole floor and stops at the wall without leaving the arena
+  const g = mk(1900);
+  let minX = 1e9;
+  run(g, kn(500), 60 * 8, () => { minX = Math.min(minX, g.x); });
+  assert(minX >= g.w / 2 + 6 - 1, 'it never goes through the wall');
+  assert(minX < 100, 'it ran the full width of the arena');
+  const skidAt = mk(1900);
+  let skidSpeeds = [];
+  run(skidAt, kn(500), 60 * 8, () => { if (skidAt.bossState === 'skid') skidSpeeds.push(Math.abs(skidAt.vx)); });
+  assert(skidSpeeds.length > 5 && skidSpeeds[skidSpeeds.length - 1] < skidSpeeds[0] * 0.3, 'it slows through the skid');
+
+  // It stands still and unhurting in its recovery, open to the sword
+  const rec = mk(1900);
+  run(rec, kn(500), 60 * 8, () => { if (rec.bossState === 'recover') assertEq(rec.vx, 0, 'standing in recovery'); });
+  const rc = mk(300, { bossState: 'recover', bossT: 1, chargeDir: -1 });
+  let hurt = 0;
+  run(rc, kn(300), 30, (i, hit) => { if (hit) hurt++; });
+  assertEq(hurt, 0, 'it does not hurt a knight who walks up to it while it rests');
+  const sw = { x: 280, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h, attacking: true, attackHitDone: false, facing: 1, onGround: true, combo: 0 };
+  const res = resolveMeleeHits(sw, [rc], null, PLAYER_SWORD);
+  assert(res.hitAny && rc.hp < rc.maxHp, 'the sword lands on a resting Nightmare');
+
+  // Hits never cancel the rear or knock it off its line
+  const h = mk(1800);
+  run(h, kn(1000), 60);
+  assertEq(h.bossState, 'windup', 'rearing');
+  h.hitStun = 0.3; h.vx = 300;
+  run(h, kn(1000), 5);
+  assertEq(h.bossState, 'windup', 'a hit does not interrupt the rear');
+  run(h, kn(1000), 60);
+  assertEq(h.bossState, 'charge', 'it still charges');
+  h.hitStun = 0.3; h.vx = 999;
+  run(h, kn(1000), 3);
+  assert(h.vx < -cfg.speed * 0.5, 'a hit does not knock a charging horse off its run');
+
+  // Enrage: faster, shorter rear and rest
+  const calm = mk(1800);
+  const mad = mk(1800, { hp: ENEMIES.nightmare.hp * 0.3 });
+  const stat = (n) => { // top speed, and how long the first rear and the first rest last
+    const out = { top: 0, rear: 0, rest: 0, rearDone: false, restDone: false };
+    run(n, kn(1000), 60 * 10, () => {
+      out.top = Math.max(out.top, Math.abs(n.vx));
+      if (n.bossState === 'windup' && !out.rearDone) out.rear += 1 / 60;
+      else if (out.rear > 0) out.rearDone = true;
+      if (n.bossState === 'recover' && !out.restDone) out.rest += 1 / 60;
+      else if (out.rest > 0) out.restDone = true;
+    });
+    return out;
+  };
+  const a = stat(calm), m = stat(mad);
+  assert(m.top > a.top * 1.15, 'below half health it runs faster');
+  assert(m.rear < a.rear && m.rest < a.rest, 'and rears and rests for less');
+  assert(m.rear >= 0.5, 'but still warns for half a second');
+
+  // Hurt boxes: nothing hits a knight above the horse, or one the horse never meets
+  const air = mk(1000, { bossState: 'charge', chargeDir: -1, chargeT: 1, chargeHitDone: false });
+  let airHits = 0;
+  run(air, kn(1000 - 200, GROUND_Y - ENEMIES.nightmare.h - 4), 90, (i, hit) => { if (hit) airHits++; });
+  assertEq(airHits, 0, 'a knight above its height is not hit');
+  const low = mk(1000, { bossState: 'charge', chargeDir: -1, chargeT: 1, chargeHitDone: false });
+  let lowHits = 0;
+  run(low, kn(1000 - 200, GROUND_Y - ENEMIES.nightmare.h + 6), 90, (i, hit) => { if (hit) lowHits++; });
+  assertEq(lowHits, 1, 'a knight inside its height is hit, once');
+  const behind = mk(1000, { bossState: 'charge', chargeDir: -1, chargeT: 1, chargeHitDone: false });
+  let behindHits = 0;
+  run(behind, kn(1400), 90, (i, hit) => { if (hit) behindHits++; });
+  assertEq(behindHits, 0, 'a knight behind a charging horse is safe');
+}
+
+section('Nightmare: a jump or a double jump clears the charge in a session');
+{
+  const { ENEMIES } = config;
+  const L = levels.getLevelById('forgegate-fields');
+  const trial = (jumpAfter, double = false) => {
+    const s = createSession();
+    s.loadLevel(L.id);
+    for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+    s.enemies.length = 0;
+    s.player.x = L.gateX + 10;
+    s.player.y = L.boss.spawnY;
+    s.updateLevelProgress();
+    const boss = s.enemies.find(e => e.isBoss);
+    const p = s.player;
+    p.hp = p.maxHp = 100;
+    p.x = (L.boss.arenaMinX + L.boss.arenaMaxX) / 2;
+    p.y = L.boss.spawnY;
+    p.facing = 1;
+    let since = -1;
+    let flying = 0;
+    for (let f = 0; f < 60 * 14; f++) {
+      if (boss.bossState === 'charge' && since < 0) since = 0;
+      let jump = false;
+      if (since >= 0) {
+        if (jumpAfter != null && since === jumpAfter) { jump = true; s.setJumpHeld(true); flying = 30; }
+        if (double && jumpAfter != null && since === jumpAfter + 14) jump = true;
+        since++;
+      }
+      if (flying > 0 && --flying === 0) s.setJumpHeld(false);
+      s.update(1 / 60, { x: 0, y: 0, jump, attack: false });
+      if (since > 0 && boss.bossState === 'recover') break;
+    }
+    return { hp: p.hp, since, state: boss.bossState };
+  };
+  const stand = trial(null);
+  assert(stand.hp < 100 && stand.state === 'recover', 'standing still gets the knight hit');
+  const clears = [];
+  for (let d = 0; d < 70; d++) clears.push(trial(d).hp === 100);
+  let best = 0, runLen = 0;
+  for (const c of clears) { runLen = c ? runLen + 1 : 0; best = Math.max(best, runLen); }
+  assert(best >= 10, `a plain jump clears it over a window of ${best} frames (needs 10)`);
+  let bestD = 0;
+  runLen = 0;
+  for (let d = 0; d < 70; d++) { const ok = trial(d, true).hp === 100; runLen = ok ? runLen + 1 : 0; bestD = Math.max(bestD, runLen); }
+  assert(bestD >= 8, `a double jump clears it too (${bestD} frames)`);
+  const late = trial(0);
+  assert(typeof late.hp === 'number', 'jumping early is a valid try');
+}
+
+// --- Hell Beast ---------------------------------------------------------------
+section('Hell Beast: rises, telegraphs every attack, spits, then arcs below half health');
+{
+  const proj = await import(js('js/domain/projectiles.js'));
+  const { tickProjectiles } = proj;
+  const { ENEMIES, ENEMY_BEAST } = config;
+  const cfg = ENEMY_BEAST.hell_beast;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const floor = [{ x: 0, y: GROUND_Y, w: 6000, h: 40, ground: true }];
+  const mk = (x, extra = {}) => ({
+    type: 'hell_beast', x, y: GROUND_Y, w: ENEMIES.hell_beast.w, h: ENEMIES.hell_beast.h, hp: ENEMIES.hell_beast.hp,
+    maxHp: ENEMIES.hell_beast.hp, speed: 0, damage: ENEMIES.hell_beast.damage, vx: 0, vy: 0,
+    onGround: true, facing: -1, homeX: x, homeY: GROUND_Y, patrolMin: 1024, patrolMax: 1936, arenaMinX: 1000, arenaMaxX: 1960,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, isBoss: true, bossAi: 'beast', ...extra,
+  });
+  const kn = (x, y = GROUND_Y) => ({ x, y, w: PLAYER_BODY.w, h: PLAYER_BODY.h });
+  const run = (e, k, n, fn) => {
+    for (let i = 0; i < n; i++) {
+      const prev = e.bossState;
+      const hit = aiUpdateEnemy(e, 1 / 60, k, floor, ENEMY_AI, phys);
+      const shot = e.shot;
+      e.shot = null;
+      if (fn) fn(i, hit, shot, prev);
+    }
+  };
+  assert(enemyUsesTelegraphedAttack(mk(100)) && !config.getEnemyMeleeCfg('hell_beast'), 'it hurts only through its own moves');
+
+  // It rises out of the bog first: untargetable, then up, then it may act
+  const e = mk(1800);
+  const k = kn(1300);
+  const vis = [];
+  let firstAttack = -1;
+  run(e, k, 60 * 4, (i, hit, shot) => {
+    if (i < 90) vis.push(e.vis);
+    if (e.bossState === 'windup' && firstAttack < 0) firstAttack = i / 60;
+  });
+  assert(vis[0] < 0.2 && vis[vis.length - 1] > 0.99, 'it rises from nothing to full height');
+  assert(firstAttack >= cfg.emerge, 'it does not act before it is up');
+  const rising = mk(1800);
+  run(rising, k, 5);
+  assert(rising.untargetable, 'it cannot be hit while it is still sunk');
+  run(rising, k, 90);
+  assert(!rising.untargetable, 'but can once it is up');
+
+  // Telegraph before every attack: every shot or burn follows a full wind-up
+  const t = mk(1800);
+  let wind = 0;
+  const windups = [];
+  let shotsOut = 0, hitsOut = 0, badRelease = 0;
+  run(t, kn(1300), 60 * 40, (i, hit, shot, prev) => {
+    if (t.bossState === 'windup') wind += 1 / 60;
+    else if (prev === 'windup') { windups.push(wind); wind = 0; }
+    if (shot && prev !== 'windup') badRelease++;
+    if (shot) shotsOut++;
+    if (hit) hitsOut++;
+  });
+  assert(windups.length >= 6, 'it attacks over and over');
+  assert(windups.every(w => w >= Math.min(cfg.spit.windup, cfg.burn.windup) - 0.05), 'every attack was telegraphed for its full wind-up');
+  assertEq(badRelease, 0, 'nothing is ever fired without a wind-up');
+  assert(shotsOut >= 5, 'it spits repeatedly');
+  assertEq(hitsOut, 0, 'a far knight is never burned');
+
+  // The first volleys are single fireballs aimed at the knight's chest
+  const u = mk(1800);
+  const singles = [];
+  run(u, kn(1300), 60 * 20, (i, hit, shot) => { if (shot) singles.push({ shot, state: u.bossState }); });
+  assert(singles.length >= 3 && singles.every(s => s.shot.length === 1), 'a healthy beast spits single shots');
+  const one = singles[0].shot[0];
+  assert(one.vx < 0 && one.vy > 0 && one.g === 0, 'flat at the knight, down from the mouth');
+  assert(Math.abs(Math.hypot(one.vx, one.vy) - cfg.spit.speed) < 1, 'at its spit speed');
+  assertEq(one.damage, ENEMIES.hell_beast.damage, 'for its damage');
+  assertEq(one.owner, 'hell_beast', 'owned by the beast');
+
+  // Below half health every other spit is an arc of three lobs landing around the knight
+  const m = mk(1800, { hp: ENEMIES.hell_beast.hp * 0.4 });
+  const volleys = [];
+  run(m, kn(1300), 60 * 40, (i, hit, shot) => { if (shot) volleys.push(shot); });
+  const arcs = volleys.filter(v => v.length === 3);
+  assert(arcs.length >= 2 && volleys.some(v => v.length === 1), 'a hurt beast mixes arcs with single shots');
+  assert(volleys.every((v, i) => i % 2 === 0 ? v.length === 1 : v.length === 3) || volleys.every((v, i) => v.length === (i % 2 ? 3 : 1)), 'single, arc, single, arc');
+  const arc = arcs[0];
+  assert(arc.every(p => p.g === cfg.arc.gravity && p.vy < 0), 'lobbed up with gravity');
+  // Flight: each lob passes over its aim point (knight +/- spread) at its flight time
+  const target = 1300;
+  arc.forEach((p, i) => {
+    const q = { ...p };
+    const T = cfg.arc.flight[i];
+    const env = { solids: [], bounds: { minX: -9999, maxX: 9999, minY: -9999, maxY: 9999 }, target: null, canHurt: false };
+    const dt = 1 / 120;
+    for (let s = 0; s < Math.round(T / dt); s++) tickProjectiles([q], dt, env);
+    assert(Math.abs(q.x - (target + (i - 1) * cfg.arc.spread)) < 14, `lob ${i} arrives over its aim point`);
+    assert(Math.abs(q.y - (GROUND_Y - PLAYER_BODY.h / 2)) < 14, `lob ${i} arrives at chest height`);
+  });
+
+  // Hit and despawn: a standing knight is hit by the middle lob; the others burst on the floor
+  const body = { x: target - PLAYER_BODY.w / 2, y: GROUND_Y - PLAYER_BODY.h, w: PLAYER_BODY.w, h: PLAYER_BODY.h };
+  const list = arc.map(p => ({ ...p }));
+  const evs = [];
+  let hurtTimes = 0;
+  const env2 = { solids: [{ x: 0, y: GROUND_Y, w: 6000, h: 100 }], bounds: { minX: 0, maxX: 6000, minY: -2000, maxY: 2000 }, target: body, canHurt: true };
+  for (let s = 0; s < 60 * 4 && list.length; s++) {
+    for (const ev of tickProjectiles(list, 1 / 60, env2)) {
+      evs.push(ev.type);
+      if (ev.type === 'hit') hurtTimes++;
+    }
+  }
+  assertEq(list.length, 0, 'every lob ends');
+  assertEq(hurtTimes, 1, 'only the lob aimed at the knight hits');
+  assertEq(evs.filter(x => x === 'wall').length, 2, 'the other two burst on the floor');
+}
+
+section('Hell Beast: the burn only hurts up close; sinking, hits and the sword');
+{
+  const { ENEMIES, ENEMY_BEAST } = config;
+  const cfg = ENEMY_BEAST.hell_beast;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const floor = [{ x: 0, y: GROUND_Y, w: 6000, h: 40, ground: true }];
+  const mk = (x, extra = {}) => ({
+    type: 'hell_beast', x, y: GROUND_Y, w: ENEMIES.hell_beast.w, h: ENEMIES.hell_beast.h, hp: ENEMIES.hell_beast.hp,
+    maxHp: ENEMIES.hell_beast.hp, speed: 0, damage: ENEMIES.hell_beast.damage, vx: 0, vy: 0,
+    onGround: true, facing: -1, homeX: x, homeY: GROUND_Y, patrolMin: 1024, patrolMax: 1936, arenaMinX: 1000, arenaMaxX: 1960,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, isBoss: true, bossAi: 'beast',
+    bossState: 'idle', bossCd: 0, bossCount: 0, spits: 0, vis: 1, ...extra,
+  });
+  const kn = (x, y = GROUND_Y) => ({ x, y, w: PLAYER_BODY.w, h: PLAYER_BODY.h });
+  const run = (e, k, n, fn) => {
+    for (let i = 0; i < n; i++) {
+      const prev = e.bossState;
+      const hit = aiUpdateEnemy(e, 1 / 60, k, floor, ENEMY_AI, phys);
+      const shot = e.shot;
+      e.shot = null;
+      if (fn) fn(i, hit, shot, prev);
+    }
+  };
+
+  // A knight beside it gets the burn: a wind-up, then one hit while the pillar stands
+  const e = mk(1500);
+  const hits = [];
+  const states = ['idle'];
+  run(e, kn(1500 - 80), 60 * 3, (i, hit) => {
+    if (states[states.length - 1] !== e.bossState) states.push(e.bossState);
+    if (hit) hits.push({ i, hit });
+  });
+  assertEq(states.slice(0, 4).join('>'), 'idle>windup>act>recover', 'burn: rear up, pillar, recover');
+  assertEq(e.bossMove, 'burn', 'the close-range move');
+  assertEq(hits.length, 1, 'one hit per burn');
+  assertEq(hits[0].hit.damage, Math.round(ENEMIES.hell_beast.damage * cfg.burn.damageMul), 'for its burn damage');
+  assertEq(hits[0].hit.dir, -1, 'knocking the knight away from it');
+  assert(hits[0].i / 60 >= cfg.burn.windup - 0.05, 'not before the full wind-up');
+
+  // Stepping out past the pillar's edge in the warning avoids it
+  const f = mk(1500);
+  let escaped = 0;
+  run(f, kn(1500 - 80), 5);
+  assertEq(f.bossState, 'windup', 'it is winding up');
+  run(f, kn(1500 - cfg.burn.half - PLAYER_BODY.w / 2 - 6), 60 * 2, (i, hit) => { if (hit) escaped++; });
+  assertEq(escaped, 0, 'a knight who backs out of the pillar\'s width is not hurt');
+  // ...while one just inside its width is
+  const g = mk(1500);
+  let inside = 0;
+  run(g, kn(1500 - cfg.burn.half + 4), 60 * 2, (i, hit) => { if (hit) inside++; });
+  assertEq(inside, 1, 'one just inside the pillar is');
+
+  // Far from the knight it never uses the burn
+  const far = mk(1500);
+  run(far, kn(1500 - cfg.burn.reach - 60), 60 * 10, (i, hit, shot) => { assert(!hit, 'no burn damage at range'); });
+  assert(far.bossMove === 'spit', 'it spits at range');
+
+  // Hits do not interrupt a wind-up or move it
+  const h = mk(1500);
+  run(h, kn(1100), 10);
+  assertEq(h.bossState, 'windup', 'winding up to spit');
+  h.hitStun = 0.3; h.vx = 400;
+  run(h, kn(1100), 5);
+  assertEq(h.bossState, 'windup', 'a hit does not cancel it');
+  assertEq(h.x, 1500, 'or push it');
+  let spat = 0;
+  run(h, kn(1100), 60, (i, hit, shot) => { if (shot) spat++; });
+  assertEq(spat, 1, 'the spit still goes out');
+
+  // Between volleys it is open: a sword lands on it in recovery
+  const sw = { x: 1420, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h, attacking: true, attackHitDone: false, facing: 1, onGround: true, combo: 0 };
+  const open = mk(1500, { bossState: 'recover', bossMove: 'spit', bossT: 1 });
+  assert(resolveMeleeHits(sw, [open], null, PLAYER_SWORD).hitAny, 'the sword lands on a beast in recovery');
+
+  // After enough attacks it sinks, cannot be hit, and surfaces on the far side of the arena
+  const s = mk(1800, { bossCount: cfg.relocate.every });
+  const seen = ['idle'];
+  let sunkHits = 0;
+  run(s, kn(1050), 60 * 5, () => {
+    if (seen[seen.length - 1] !== s.bossState) seen.push(s.bossState);
+    if (s.bossState === 'hidden') {
+      assert(s.untargetable, 'hidden means untargetable');
+      const sw2 = { ...sw, x: s.x - 80 };
+      if (resolveMeleeHits(sw2, [s], null, PLAYER_SWORD).hitAny) sunkHits++;
+    }
+  });
+  assertEq(seen.slice(0, 4).join('>'), 'idle>sink>hidden>emerge', 'sink, hide, resurface');
+  assertEq(sunkHits, 0, 'nothing hurts it while it is sunk');
+  assert(s.x > 1500, 'it came up on the side away from the knight');
+  const s2 = mk(1800, { bossCount: cfg.relocate.every });
+  run(s2, kn(1900), 60 * 5);
+  assert(s2.x < 1500, 'and on the other side when the knight is across the arena');
+}
+
+section('Hell Beast: spits in a session, the sword cuts its fireball');
+{
+  const L = levels.getLevelById('forest-ramparts');
+  const s = createSession();
+  s.loadLevel(L.id);
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  s.enemies.length = 0;
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  const boss = s.enemies.find(e => e.isBoss);
+  const p = s.player;
+  p.hp = p.maxHp = 9999;
+  p.x = L.boss.arenaMinX + 200;
+  for (let i = 0; i < 60 * 8 && !s.projectiles.length; i++) s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assert(s.projectiles.length >= 1 && s.projectiles[0].owner === 'hell_beast', 'the beast puts a fireball in the session');
+  assertEq(boss.bossAi, 'beast', 'spawned with its AI');
+  // Put a fireball at the knight and swing
+  s.projectiles.length = 0;
+  const { makeProjectile } = await import(js('js/domain/projectiles.js'));
+  s.projectiles.push(makeProjectile('fireball', { x: p.x + 50, y: p.y - 40, vx: -200, damage: 16, owner: 'hell_beast' }));
+  p.facing = 1; p.inv = 0;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: true });
+  assertEq(s.projectiles.length, 0, 'the sword destroys it');
+  // Contact with the beast does not hurt (only its moves do)
+  boss.bossState = 'recover'; boss.bossMove = 'spit'; boss.bossT = 5;
+  p.x = boss.x; p.inv = 0;
+  const hp = p.hp;
+  for (let i = 0; i < 20; i++) s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(p.hp, hp, 'standing in a resting beast costs nothing');
+}
+
+section('projectile gravity: lobs arc and land');
+{
+  const proj = await import(js('js/domain/projectiles.js'));
+  const { makeProjectile, tickProjectiles } = proj;
+  const straight = makeProjectile('fireball', { x: 0, y: 0, vx: 100, vy: 0, damage: 1 });
+  assertEq(straight.g, 0, 'no gravity by default');
+  const lob = makeProjectile('fireball', { x: 0, y: 0, vx: 200, vy: -300, g: 900, damage: 1 });
+  const env = { solids: [{ x: -100, y: 400, w: 2000, h: 50 }], bounds: { minX: -500, maxX: 3000, minY: -1000, maxY: 1000 }, target: null, canHurt: false };
+  let top = 0;
+  const list = [lob];
+  let ev = [];
+  for (let i = 0; i < 600 && !ev.length; i++) { ev = tickProjectiles(list, 1 / 60, env); top = Math.min(top, lob.y); }
+  assert(top < -40 && top > -60, 'it rises about v²/2g and falls');
+  assertEq(ev[0] && ev[0].type, 'wall', 'and bursts on the floor');
+  assert(Math.abs(ev[0].p.x - 267) < 15, 'where the arc says');
+}
+
+// --- Angel ---------------------------------------------------------------------
+section('Angel: hovers high, telegraphs, dives on a locked line, lands open, returns');
+{
+  const { ENEMIES, ENEMY_SWOOP } = config;
+  const cfg = ENEMY_SWOOP.angel;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const mk = (x, y, extra = {}) => ({
+    type: 'angel', x, y, w: ENEMIES.angel.w, h: ENEMIES.angel.h, hp: ENEMIES.angel.hp, maxHp: ENEMIES.angel.hp,
+    speed: ENEMIES.angel.speed, damage: ENEMIES.angel.damage, vx: 0, vy: 0, onGround: false,
+    facing: -1, homeX: x, homeY: y, patrolMin: 24, patrolMax: 1976, arenaMinX: 0, arenaMaxX: 2000, floorY: GROUND_Y,
+    fly: true, swoops: true, bossAi: 'angel', isBoss: true,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, swoopState: 'hover', swoopT: 0, swoopCd: 0, ...extra,
+  });
+  const k = { x: 900, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h };
+  const run = (e, kn, n, fn) => {
+    for (let i = 0; i < n; i++) {
+      const hit = aiUpdateEnemy(e, 1 / 60, kn, [], ENEMY_AI, phys);
+      const shot = e.shot;
+      e.shot = null;
+      if (fn) fn(i, hit, shot);
+    }
+  };
+  assert(enemyUsesTelegraphedAttack(mk(0, 0)), 'she hurts through her dive, not by contact');
+
+  // Hovering: out of reach of a ground swing
+  const e = mk(900, GROUND_Y - 250);
+  run(e, k, 40);
+  const swing = getAttackBox({ x: 900, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h, facing: 1, onGround: true }, null, PLAYER_SWORD);
+  assert(!combat.enemyOverlapsBox(e, swing), 'a standing knight cannot reach her while she hovers');
+  assert(e.y < GROUND_Y - cfg.hoverAbove[0] + 14, 'she hovers above the knight');
+
+  // Telegraph, locked dive, landing, rest, return, cooldown
+  const a = mk(800, GROUND_Y - 250);
+  const seq = ['hover'];
+  const hits = [];
+  let dir0 = null;
+  let landY = null;
+  let landedFor = 0;
+  run(a, k, 60 * 9, (i, hit) => {
+    if (seq[seq.length - 1] !== a.swoopState) seq.push(a.swoopState);
+    if (hit) hits.push(hit);
+    if (a.swoopState === 'dash' && !dir0) dir0 = { ...a.swoopDir };
+    if (a.swoopState === 'land') { landY = a.y; landedFor += 1 / 60; }
+  });
+  assertEq(seq.slice(0, 5).join('>'), 'hover>windup>dash>land>return', 'hover, warn, dive, land, return');
+  assertEq(seq[5], 'hover', 'and hover again');
+  assert(dir0 && dir0.x > 0 && dir0.y > 0, 'diving toward the knight');
+  assertEq(landY, GROUND_Y, 'she lands with her feet on the floor');
+  assert(Math.abs(landedFor - cfg.land) < 0.2 || landedFor >= cfg.land - 0.1, 'resting for the landing time');
+  assertEq(hits.length >= 1 ? 1 : 0, 1, 'a standing knight is hit by the dive');
+  assertEq(hits[0].damage, Math.round(ENEMIES.angel.damage * cfg.damageMul), 'for her dive damage');
+  const t = mk(800, GROUND_Y - 250);
+  let wt = 0, begun = false;
+  run(t, k, 300, () => { if (t.swoopState === 'windup') { begun = true; wt += 1 / 60; } });
+  assert(begun && wt >= cfg.windup - 0.05, 'the warning lasts the full wind-up');
+
+  // The line is locked: a knight who moves away is missed
+  const m = mk(800, GROUND_Y - 250);
+  let guard = 0;
+  while (m.swoopState !== 'dash' && guard++ < 600) run(m, k, 1);
+  const d0 = { ...m.swoopDir };
+  const gone = { ...k, x: 1700 };
+  let missed = 0;
+  run(m, gone, 90, (i, hit) => { if (hit) missed++; });
+  assert(m.swoopDir.x === d0.x && m.swoopDir.y === d0.y, 'the dive does not steer');
+  assertEq(missed, 0, 'and misses a knight who has moved');
+  assertEq(m.swoopState === 'dash', false, 'it ends');
+
+  // Only the dive hurts: not in the wind-up, the rest, the hover, nor to a knight beneath her
+  const l = mk(900, GROUND_Y, { swoopState: 'land', swoopT: 1, y: GROUND_Y });
+  let landHits = 0;
+  run(l, k, 20, (i, hit) => { if (hit) landHits++; });
+  assertEq(landHits, 0, 'a knight beside her resting on the floor is not hurt');
+  const w = mk(900, GROUND_Y - 80, { swoopState: 'windup', swoopMove: 'dive', swoopT: 0.5 });
+  let windHits = 0;
+  run(w, k, 20, (i, hit) => { if (hit) windHits++; });
+  assertEq(windHits, 0, 'nor in the wind-up');
+
+  // Resting, she is open to the sword, and the sword does not end her rest
+  const sw = { x: 860, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h, attacking: true, attackHitDone: false, facing: 1, onGround: true, combo: 0 };
+  const open = mk(900, GROUND_Y, { swoopState: 'land', swoopT: 1 });
+  assert(resolveMeleeHits(sw, [open], null, PLAYER_SWORD).hitAny, 'the sword lands on her');
+  run(open, k, 10);
+  assertEq(open.swoopState, 'land', 'a hit does not make her take off early');
+
+  // A hit does not cancel her wind-up (bosses shrug it off)
+  const f = mk(800, GROUND_Y - 250);
+  guard = 0;
+  while (f.swoopState !== 'windup' && guard++ < 600) run(f, k, 1);
+  f.hitStun = 0.3;
+  run(f, k, 4);
+  assertEq(f.swoopState, 'windup', 'a hit does not cancel her wind-up');
+  run(f, k, 60);
+  assertEq(f.swoopState, 'dash', 'she still dives');
+
+  // She returns to hover after landing and waits out the cooldown
+  const r = mk(900, GROUND_Y, { swoopState: 'return', swoopT: 0.3, y: GROUND_Y });
+  run(r, { ...k, x: 1500 }, 80);
+  assert(r.y < GROUND_Y - 90 && r.swoopState === 'hover', 'back up in the air');
+  assert(r.swoopCd > 0 || r.swoopState === 'hover', 'with a cooldown');
+
+  // She stays inside the arena
+  const edge = mk(1990, GROUND_Y - 250);
+  run(edge, { ...k, x: 3000 }, 120);
+  assert(edge.x <= 1976, 'she does not fly through the wall');
+
+  // Dives are spaced by the cooldown
+  const c = mk(800, GROUND_Y - 250);
+  const dives = [];
+  let prev = 'hover';
+  for (let i = 0; i < 60 * 14; i++) {
+    run(c, k, 1);
+    if (c.swoopState === 'dash' && prev !== 'dash') dives.push(i / 60);
+    prev = c.swoopState;
+  }
+  assert(dives.length >= 3, 'she dives repeatedly');
+  for (let i = 1; i < dives.length; i++) assert(dives[i] - dives[i - 1] >= cfg.cooldown + cfg.land, 'dives are spaced out');
+}
+
+section('Angel: below half health she alternates dives with a fan of light bolts');
+{
+  const proj = await import(js('js/domain/projectiles.js'));
+  const { ENEMIES, ENEMY_SWOOP } = config;
+  const cfg = ENEMY_SWOOP.angel;
+  const v = cfg.volley;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const mk = (hp) => ({
+    type: 'angel', x: 800, y: GROUND_Y - 250, w: ENEMIES.angel.w, h: ENEMIES.angel.h, hp, maxHp: ENEMIES.angel.hp,
+    speed: ENEMIES.angel.speed, damage: ENEMIES.angel.damage, vx: 0, vy: 0, onGround: false,
+    facing: -1, homeX: 800, homeY: GROUND_Y - 250, patrolMin: 24, patrolMax: 1976, arenaMinX: 0, arenaMaxX: 2000, floorY: GROUND_Y,
+    fly: true, swoops: true, bossAi: 'angel', isBoss: true,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, swoopState: 'hover', swoopT: 0, swoopCd: 0,
+  });
+  const k = { x: 900, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h };
+  const attacks = (e, secs) => {
+    const out = [];
+    let prev = 'hover';
+    let wind = 0;
+    for (let i = 0; i < 60 * secs; i++) {
+      aiUpdateEnemy(e, 1 / 60, k, [], ENEMY_AI, phys);
+      const shot = e.shot;
+      e.shot = null;
+      if (e.swoopState === 'windup') wind += 1 / 60;
+      if (prev === 'windup' && e.swoopState !== 'windup') {
+        out.push({ move: e.swoopState === 'dash' ? 'dive' : 'volley', wind, shot });
+        wind = 0;
+      }
+      if (shot && prev !== 'windup') out.push({ move: 'bad', wind: 0, shot });
+      prev = e.swoopState;
+    }
+    return out;
+  };
+  const healthy = attacks(mk(ENEMIES.angel.hp), 30);
+  assert(healthy.length >= 4 && healthy.every(a => a.move === 'dive'), 'a healthy angel only dives');
+  const hurt = attacks(mk(ENEMIES.angel.hp * 0.4), 40);
+  assert(hurt.length >= 5, 'a hurt angel keeps attacking');
+  assert(hurt.every(a => a.move !== 'bad'), 'no bolts without a wind-up');
+  assertEq(hurt.map(a => a.move).slice(0, 4).join(','), 'dive,volley,dive,volley', 'dive, volley, dive, volley');
+  assert(hurt.every(a => a.wind >= Math.min(cfg.windup, v.windup) - 0.05), 'every attack is telegraphed for its full wind-up');
+  const volley = hurt.find(a => a.move === 'volley').shot;
+  assertEq(volley.length, v.count, 'a fan of bolts');
+  assert(volley.every(p => p.kind === 'lightbolt' && p.owner === 'angel' && p.damage === Math.round(ENEMIES.angel.damage * v.damageMul)), 'light bolts at her volley damage');
+  const angles = volley.map(p => Math.atan2(p.vy, p.vx));
+  assert(Math.abs((angles[1] - angles[0]) - v.spread) < 0.01 && Math.abs((angles[2] - angles[1]) - v.spread) < 0.01, 'spread evenly');
+  assert(volley.every(p => p.vy > 0 && Math.abs(Math.hypot(p.vx, p.vy) - v.speed) < 1), 'down at the knight at bolt speed');
+
+  // The middle bolt finds a standing knight and the others burst on the floor or fly off
+  const list = volley.map(p => ({ ...p }));
+  const evs = [];
+  const env = { solids: [{ x: 0, y: GROUND_Y, w: 6000, h: 100 }], bounds: { minX: 0, maxX: 6000, minY: -2000, maxY: 2000 }, target: { x: k.x - k.w / 2, y: k.y - k.h, w: k.w, h: k.h }, canHurt: true };
+  for (let i = 0; i < 60 * 5 && list.length; i++) for (const ev of proj.tickProjectiles(list, 1 / 60, env)) evs.push(ev.type);
+  assertEq(evs.filter(x => x === 'hit').length, 1, 'one bolt hits the knight');
+  assertEq(list.length, 0, 'and all of them end');
+}
+
+section('Angel: in a session she dives, lands, and the sword hurts her');
+{
+  const L = levels.getLevelById('forge-ruins');
+  const s = createSession();
+  s.loadLevel(L.id);
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  s.enemies.length = 0;
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  const boss = s.enemies.find(e => e.isBoss);
+  const p = s.player;
+  assertEq(boss.type, 'angel', 'the angel');
+  assertEq(boss.floorY, L.boss.floorY, 'she knows the floor');
+  assert(boss.fly && boss.y < L.boss.floorY - 100, 'in the air');
+  p.hp = p.maxHp = 9999;
+  p.x = L.boss.arenaMinX + 400;
+  let landed = false;
+  for (let i = 0; i < 60 * 14 && !landed; i++) {
+    s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+    if (boss.swoopState === 'land') landed = true;
+  }
+  assert(landed, 'she lands');
+  assertEq(boss.y, L.boss.floorY, 'on the arena floor');
+  assert(p.hp < 9999, 'the dive hurt a knight who stood still');
+  const hp0 = boss.hp;
+  p.x = boss.x - 60; p.y = L.boss.floorY; p.facing = 1; p.attackCd = 0; p.attacking = false; p.inv = 0;
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: true });
+  assert(boss.hp < hp0, 'the knight\'s sword cuts her while she rests');
+  // Touching her resting body costs nothing
+  const hp1 = p.hp;
+  p.x = boss.x; p.inv = 0;
+  for (let i = 0; i < 10; i++) s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(p.hp, hp1, 'touching her while she rests is safe');
+}
+
 
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failed) {

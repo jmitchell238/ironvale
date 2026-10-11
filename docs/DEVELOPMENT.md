@@ -34,7 +34,7 @@ Some numbers to design around (32 px tiles):
 - A ladder's top (`rTop`) must be the row of a ledge or ground top, so the knight has something to step onto.
 - Enemies stand on platform tops. The "full tile stage" test checks that every ground enemy, checkpoint and ladder top sits on one, and the bot test checks that a simple run-and-jump bot reaches the gate.
 
-`buildForestRamparts()` follows the same pattern with the `'swamp'` theme, and `buildForgeRuins()` with `'town'` (street, rooftops, a hall with a ceiling to walk under or climb over, then the church). `buildIronCaverns()` uses the `'castle'` theme: halls with ceilings, two stone shafts, drawbridges over pits, and a walled throne room at the end. Its `boss` block (`arenaMinX`, `arenaMaxX`, `spawnX`, `spawnY`) must sit on one flat floor inside the bounds, with the gate as the arena's left wall (the tests check this); the arena should be at least one screen (960 px) wide so the camera holds still.
+`buildForestRamparts()` follows the same pattern with the `'swamp'` theme, and `buildForgeRuins()` with `'town'` (street, rooftops, a hall with a ceiling to walk under or climb over, then the church). `buildIronCaverns()` uses the `'castle'` theme: halls with ceilings, two stone shafts, drawbridges over pits, and a walled throne room at the end. Its `boss` block (`arenaMinX`, `arenaMaxX`, `spawnX`, `spawnY`) must sit on one flat floor inside the bounds, with the gate as the arena's left wall (the tests check this); the arena should be at least one screen (960 px) wide so the camera holds still. The other three stages end the same way: Forgegate Fields has the Nightmare on open cliffs, Forest Ramparts the Hell Beast in the bog, and Forge Ruins the angel in a church nave with a low vault (see [Adding a boss](#adding-a-boss)).
 
 ### Adding a theme
 
@@ -67,6 +67,15 @@ It needs Pillow. Every animation is lined up on the character's feet, so sprites
 2. Add its stats to the enemy table in `js/config/index.js` (`skin` names its sprite in `assets/gv/enemy/`; the Warden also has `warden_windup` and `warden_slam` strips chosen in `wardenFrame()` in `render.js`), and an entry in `ENEMY_MELEE` if it has a telegraphed attack (or `ENEMY_LUNGE` plus `lunges: true` for the hound's leap). Several strips per enemy are chosen in `render.js`, like `houndFrame()`. A caster uses `ENEMY_CAST` plus `casts: true` (the wizard), a diving flier `ENEMY_SWOOP` plus `swoops: true` (the fire skull), and a new kind of shot goes in `ENEMY_PROJECTILES` (see [ARCHITECTURE.md](ARCHITECTURE.md#enemy-projectiles)).
 3. Add it to a stage's encounters.
 4. Test the AI in `tests/run.mjs` without the canvas.
+
+### Adding a boss
+
+The four stage bosses follow one pattern (the Warden's slam is the oldest; the Nightmare, Hell Beast and angel are newer):
+
+1. **Arena.** Build it into the tile map past the gate: a flat floor one screen wide (30 tiles) starting at the first column after the gate, solid rock at the far end. Add the `boss` block (`arenaMinX`, `arenaMaxX`, `spawnX`, `spawnY`; a flier also gets `floorY` for where she lands and an optional `camY` that holds the camera at that height) and a checkpoint just before the gate. The "boss arena" tests in `tests/run.mjs` check the layout, the closed gate and the camera lock.
+2. **Stats.** Add an `isBoss` entry to `ENEMIES` with a `label` (it is the name on the health bar) and `bossAi`. `bossAi` marks an enemy that hurts only through its own moves (no contact damage). Keep health in the order Nightmare < Hell Beast < Angel < Warden.
+3. **Moves.** A grounded boss is a state machine in `js/domain/enemyAi.js` driven from `aiUpdateEnemy()`: `tickEnemyCharge()` (`ENEMY_CHARGE`) and `tickEnemyBeast()` (`ENEMY_BEAST`). A flier extends `tickEnemySwoop()` through `ENEMY_SWOOP` (the angel's `landing`, `hitDash`, `noFlinch` and `volley` keys). Every attack goes `windup` (the warning, drawn with the bright flash) then the attack; bosses ignore hits during a wind-up. A move that hurts returns the same `{ hit, damage, knockback, dir }` as `tickEnemySlam()`; a volley sets `e.shot` to an array of projectiles. Test each pattern without the canvas.
+4. **Art.** Add the strips to `tools/build_assets.py` (`boss_assets()` has all three), choose frames in `render.js` (`nightmareFrame()`, `beastFrame()`, `angelFrame()`) from the state timers, and pick a whole-number `drawScale`.
 
 ### Changing the sword
 

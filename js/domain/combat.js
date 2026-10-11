@@ -94,7 +94,7 @@ export function resolveMeleeHits(player, enemies, stats, swordCfg) {
 
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    if (!enemyOverlapsBox(e, box)) continue;
+    if (e.untargetable || !enemyOverlapsBox(e, box)) continue; // a beast sunk in the bog cannot be hit
     if (enemyBlocksFront(e, player)) {
       hits.push({ enemy: e, index: i, killed: false, box, blocked: true });
       continue;

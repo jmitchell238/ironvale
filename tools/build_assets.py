@@ -32,6 +32,8 @@ DEMON = 'demon-Files/PNG'
 HOUND = 'Hell-Hound-Files/PNG'
 SKULL = 'Fire-Skull-Files/PNG'
 BEAST = 'Hell-Beast-Files/PNG'
+NIGHTMARE = 'Nightmare-Files/PNG'
+ANGEL = 'SPRITES/angel/sprites'
 
 # castle/tileset.png: the old dark castle tileset at the top, then (CS_ROW rows down) floor, body and
 # ledge strips re-cut so their art starts at the top of the tile, then the castle's two backdrop
@@ -88,10 +90,12 @@ def drop_to_floor(frames):
     return out
 
 
-def pack(name, frames, fps, anchor_frame=0, anchor_x=None, pad=1):
+def pack(name, frames, fps, anchor_frame=0, anchor_x=None, pad=1, anchor_y=None):
     ax, ay = feet_anchor(frames, anchor_frame)
     if anchor_x is not None:
         ax = anchor_x
+    if anchor_y is not None:
+        ay = anchor_y
     left = right = top = 0
     for f in frames:
         bb = f.getbbox()
@@ -254,6 +258,38 @@ def caster_assets(gv, meta):
     meta['fx/fireball'] = pack('fx/fireball', ball, 12, anchor_x=mid_x(ball))
 
 
+def boss_assets(gv, meta):
+    """The stage 1-3 bosses: the Nightmare horse, the Hell Beast and the church's angel (plus her light bolt)."""
+    pat = gv('gv-patreon', PATREON)
+    n = os.path.join(pat, NIGHTMARE)
+    for name, k, fps in (('idle', 4, 8), ('galloping', 4, 14)):
+        frames = sheet(os.path.join(n, 'nightmare-%s.png' % name), k)
+        key = 'enemy/nightmare' + ('' if name == 'idle' else '_gallop')
+        meta[key] = pack(key, frames, fps, anchor_x=mid_x(frames))
+    b = os.path.join(pat, BEAST, 'without-stroke')
+    idle = sheet(os.path.join(b, 'hell-beast-idle.png'), 6)
+    breath = sheet(os.path.join(b, 'hell-beast-breath.png'), 4)
+    burn = sheet(os.path.join(b, 'hell-beast-burn.png'), 6)
+    # Same standing spot for every strip: the body's middle, so swapping strips does not slide the beast.
+    meta['enemy/beast'] = pack('enemy/beast', idle, 8, anchor_x=mid_x(idle))
+    meta['enemy/beast_breath'] = pack('enemy/beast_breath', breath, 8, anchor_x=mid_x(breath))
+    meta['enemy/beast_burn'] = pack('enemy/beast_burn', burn[:4], 8, anchor_x=mid_x(burn[:4]))
+    meta['enemy/beast_pillar'] = pack('enemy/beast_pillar', burn[4:], 12, anchor_x=mid_x(burn[4:]))
+    a = gv(CHURCH, ANGEL)
+    fly = folder(os.path.join(a, 'idle'))
+    smite = folder(os.path.join(a, 'angel-attack'))
+    # She hovers, so there are no feet: both strips share the cell's bottom edge and centre.
+    for key, frames, fps in (('enemy/angel', fly, 10), ('enemy/angel_smite', smite, 8)):
+        meta[key] = pack(key, frames, fps, anchor_x=frames[0].width // 2, anchor_y=frames[0].height)
+    # The angel's bolt is the fireball with red and blue swapped, so it burns white-blue.
+    ball = sheet(os.path.join(pat, BEAST, 'fire-ball.png'), 3)
+    cool = []
+    for f in ball:
+        r, g, bl, al = f.split()
+        cool.append(Image.merge('RGBA', (bl, g, r, al)))
+    meta['fx/lightbolt'] = pack('fx/lightbolt', cool, 12, anchor_x=mid_x(cool))
+
+
 def main(packs):
     gv = lambda *p: os.path.join(packs, *p)
     hero = gv('gv-patreon', HERO)
@@ -300,6 +336,7 @@ def main(packs):
     warden_assets(gv, meta)
     monster_assets(gv, meta)
     caster_assets(gv, meta)
+    boss_assets(gv, meta)
 
     lic = os.path.join(OUT, 'licenses')
     os.makedirs(lic, exist_ok=True)

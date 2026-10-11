@@ -1,20 +1,21 @@
 /**
  * Domain: enemy projectiles (pure).
- * A projectile is a box centred on (x, y) that flies in a straight line. The caller owns the
- * list and applies damage; here they move, hit the knight, die on rock or out of bounds,
- * and can be cut down by the sword.
+ * A projectile is a box centred on (x, y) that flies in a straight line, or in an arc when it has
+ * gravity. The caller owns the list and applies damage; here they move, hit the knight, die on rock
+ * or out of bounds, and can be cut down by the sword.
  */
 
 import { ENEMY_PROJECTILES } from '../config/index.js';
 
 /**
  * @param {string} kind - key of ENEMY_PROJECTILES
- * @param {{ x: number, y: number, vx: number, vy?: number, damage: number, owner?: string }} o
+ * @param {{ x: number, y: number, vx: number, vy?: number, g?: number, damage: number, owner?: string }} o
+ * `g` is gravity in px/s² (0 flies straight)
  */
 export function makeProjectile(kind, o) {
   const cfg = ENEMY_PROJECTILES[kind];
   return {
-    kind, x: o.x, y: o.y, vx: o.vx, vy: o.vy || 0, damage: o.damage,
+    kind, x: o.x, y: o.y, vx: o.vx, vy: o.vy || 0, g: o.g || 0, damage: o.damage,
     w: cfg.w, h: cfg.h, life: cfg.life, age: 0, owner: o.owner || null,
   };
 }
@@ -47,9 +48,10 @@ export function tickProjectiles(list, dt, env) {
     const p = list[i];
     let end = null;
     // Small steps so a fast shot cannot skip through a thin wall or the knight.
-    const dist = Math.hypot(p.vx, p.vy) * dt;
+    const dist = Math.hypot(p.vx, p.vy + p.g * dt) * dt;
     const n = Math.max(1, Math.ceil(dist / 4));
     for (let k = 0; k < n && !end; k++) {
+      p.vy += p.g * dt / n;
       p.x += p.vx * dt / n;
       p.y += p.vy * dt / n;
       const b = env.bounds;

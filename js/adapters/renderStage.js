@@ -648,9 +648,10 @@ export function drawProjectiles(ctx, projectiles, cam) {
     const dh = en.meta.fh * cfg.scale;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
+    const [gr, gg, gb] = cfg.glow || [255, 140, 40];
     const g = ctx.createRadialGradient(x, y, 4, x, y, 44);
-    g.addColorStop(0, 'rgba(255,160,50,0.55)');
-    g.addColorStop(1, 'rgba(255,100,20,0)');
+    g.addColorStop(0, `rgba(${gr},${gg},${gb},0.55)`);
+    g.addColorStop(1, `rgba(${gr},${gg},${gb},0)`);
     ctx.fillStyle = g;
     ctx.fillRect(x - 44, y - 44, 88, 88);
     ctx.globalCompositeOperation = 'source-over';

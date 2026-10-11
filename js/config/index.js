@@ -247,6 +247,24 @@ export const ENEMIES = {
     color: '#e8602a', damage: 14, skin: 'fire_skull', drawScale: 1,
     fly: true, swoops: true, label: 'Fire Skull',
   },
+  /** Stage 1 boss — a spectral horse that rears, then charges the length of the arena. Low body so a jump clears it. */
+  nightmare: {
+    w: 80, h: 62, hp: 180, speed: 150, score: 150, xp: 20,
+    color: '#2a8aa8', damage: 18, skin: 'nightmare', drawScale: 2,
+    isBoss: true, label: 'The Nightmare', bossAi: 'charge',
+  },
+  /** Stage 2 boss — rises from the bog, spits fireballs and burns anyone who stays close. */
+  hell_beast: {
+    w: 96, h: 150, hp: 260, speed: 0, score: 260, xp: 32,
+    color: '#c0402a', damage: 16, skin: 'beast', drawScale: 3,
+    isBoss: true, label: 'The Hell Beast', bossAi: 'beast',
+  },
+  /** Stage 3 boss — hovers out of reach, dives at the knight and lands open to the sword. */
+  angel: {
+    w: 64, h: 120, hp: 340, speed: 140, score: 340, xp: 42,
+    color: '#d8d8f0', damage: 20, skin: 'angel', drawScale: 2, artFaces: 1,
+    isBoss: true, label: 'The Fallen Angel', fly: true, swoops: true, bossAi: 'angel',
+  },
   /** Campaign finale — Iron Caverns. */
   iron_warden: {
     w: 100, h: 124, hp: 420, speed: 36, score: 400, xp: 50,
@@ -336,20 +354,65 @@ export const ENEMY_CAST = {
  * Fire skull swoop: hover above the knight, telegraph (it ignites, tracking), then dash
  * along the line locked at take-off, then drift back up and wait out the cooldown.
  * Keys: range (max distance that starts it), minDist, windup, speed, overshoot, maxDash, recover, cooldown, hoverAbove
+ * Optional: landing, land, hitDash, noFlinch, knockback, damageMul, volley (see the angel)
  */
 export const ENEMY_SWOOP = {
   fire_skull: {
     range: 420, minDist: 90, windup: 0.6, speed: 400, overshoot: 70, maxDash: 0.8,
     recover: 0.9, cooldown: 2.0, hoverAbove: [110, 190],
   },
+  // The angel: the dive ends on the ground and she rests there for `land` (the sword's chance); only the
+  // dive hurts (`hitDash`), and no hit cancels a wind-up (`noFlinch`). Below `volley.at` of her health every
+  // other attack is a fan of `volley.count` light bolts instead of a dive.
+  angel: {
+    range: 760, minDist: 120, windup: 0.8, speed: 560, overshoot: 40, maxDash: 1.2,
+    recover: 0.9, cooldown: 1.4, hoverAbove: [130, 170], landing: true, land: 1.3,
+    hitDash: true, noFlinch: true, knockback: 440, damageMul: 1.2,
+    volley: { at: 0.5, count: 3, windup: 0.8, recover: 0.8, speed: 300, spread: 0.38, damageMul: 0.7, projectile: 'lightbolt' },
+  },
+};
+
+/**
+ * Nightmare charge: it backs off until it is `runUp` from the knight, rears (the warning, never
+ * interrupted), then runs at the wall behind the knight along the line it faced and skids to a stop
+ * there, open to the sword for `recover`. Only the run hurts, and only a knight whose body reaches the
+ * horse's low hitbox (a jump clears it). Below `enrage.at` of its health it is faster and rests less.
+ * Keys: pace, runUp, windup, speed, ramp, skid, recover, cooldown, knockback, enrage { at, speed, windup, recover }
+ */
+export const ENEMY_CHARGE = {
+  nightmare: {
+    pace: 230, runUp: 420, windup: 0.7, speed: 450, ramp: 0.25, skid: 0.45, recover: 1.4,
+    cooldown: 0.5, knockback: 520, enrage: { at: 0.5, speed: 1.25, windup: 0.8, recover: 0.7 },
+  },
+};
+
+/**
+ * Hell Beast: it stays where it surfaced and picks a move when its cooldown ends. A knight within
+ * `burn.reach` gets the burn (the beast ignites for `windup`, then a fire pillar of half-width `half`
+ * stands for `active`); anyone farther gets a spit (one fireball, or `arc.count` lobs below `arc.at`
+ * of its health on every other spit). Every `relocate.every` attacks it sinks into the bog, is untargetable
+ * while `hidden`, and surfaces on the side farthest from the knight. Telegraphs are never interrupted.
+ * Keys: range, aggroY, cooldown, rageCooldown, spit { windup, recover, speed, muzzle, damageMul },
+ * arc { at, count, gravity, flight[], spread }, burn { reach, half, windup, active, recover, damageMul, knockback },
+ * relocate { every, sink, hidden, emerge }, emerge, edge (px kept from the arena walls)
+ */
+export const ENEMY_BEAST = {
+  hell_beast: {
+    range: 800, aggroY: 260, cooldown: 1.2, rageCooldown: 0.8, emerge: 1.4, edge: 150,
+    spit: { windup: 0.8, recover: 0.8, speed: 340, muzzle: 0.8, damageMul: 1 },
+    arc: { at: 0.5, count: 3, gravity: 900, flight: [0.85, 1.05, 1.25], spread: 120 },
+    burn: { reach: 150, half: 100, windup: 0.85, active: 0.5, recover: 1.0, damageMul: 1.5, knockback: 420 },
+    relocate: { every: 4, sink: 0.8, hidden: 0.9, emerge: 1.0 },
+  },
 };
 
 /**
  * Projectiles shot by enemies (domain/projectiles.js). w/h are the hitbox, life is seconds.
- * The sprite strip flies left; the renderer turns it to face the velocity.
+ * The sprite strip flies left; the renderer turns it to face the velocity. `glow` is the halo colour (r,g,b).
  */
 export const ENEMY_PROJECTILES = {
-  fireball: { w: 30, h: 18, life: 3.2, sprite: 'fx/fireball', scale: 3 },
+  fireball: { w: 30, h: 18, life: 3.2, sprite: 'fx/fireball', scale: 3, glow: [255, 140, 40] },
+  lightbolt: { w: 26, h: 18, life: 3.4, sprite: 'fx/lightbolt', scale: 3, glow: [120, 170, 255] },
 };
 export const MAX_PROJECTILES = 24;
 

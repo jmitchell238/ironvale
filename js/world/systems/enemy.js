@@ -135,6 +135,7 @@ export function spawnEnemy(session, type, opts = {}) {
     castT: 0,
     castCd: 0,
     shot: null,
+    bossAi: def.bossAi || null,
     swoops: !!def.swoops,
     swoopState: 'hover',
     swoopT: 0,
@@ -197,7 +198,7 @@ export function updateEnemies(session, dt) {
     const e = session.enemies[i];
     const slamHit = updateEnemy(session, e, dt);
     if (e.shot) {
-      spawnProjectile(session, e.shot);
+      for (const shot of Array.isArray(e.shot) ? e.shot : [e.shot]) spawnProjectile(session, shot); // volleys come as an array
       e.shot = null;
     }
     // Knocked off a cliff: count it as a kill

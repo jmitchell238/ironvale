@@ -13,6 +13,13 @@ import { cameraLimits } from '../../domain/levels.js';
  */
 export function getCameraBounds(session) {
   if (session.arena) {
+    const lock = session.arena.camY;
+    if (lock != null) {
+      // Held at one height (a tall portrait view is already clamped to the top of the map).
+      const lim = cameraLimits(session.level || { bounds: { minX: 0, maxX: W, minY: 0, maxY: H } }, W, H);
+      const y = Math.min(lock, lim.maxY);
+      return { minX: session.arena.minX, maxX: Math.max(session.arena.minX, session.arena.maxX - W), minY: y, maxY: y };
+    }
     return {
       minX: session.arena.minX,
       maxX: Math.max(session.arena.minX, session.arena.maxX - W),

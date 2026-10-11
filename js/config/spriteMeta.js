@@ -21,6 +21,48 @@ export const SPRITE_META = {
   "cliffs/tileset": {
     "src": "assets/gv/cliffs/tileset.png"
   },
+  "enemy/angel": {
+    "fh": 118,
+    "fps": 10,
+    "frames": 8,
+    "fw": 98,
+    "src": "assets/gv/enemy/angel.png"
+  },
+  "enemy/angel_smite": {
+    "fh": 98,
+    "fps": 8,
+    "frames": 3,
+    "fw": 84,
+    "src": "assets/gv/enemy/angel_smite.png"
+  },
+  "enemy/beast": {
+    "fh": 55,
+    "fps": 8,
+    "frames": 6,
+    "fw": 50,
+    "src": "assets/gv/enemy/beast.png"
+  },
+  "enemy/beast_breath": {
+    "fh": 63,
+    "fps": 8,
+    "frames": 4,
+    "fw": 48,
+    "src": "assets/gv/enemy/beast_breath.png"
+  },
+  "enemy/beast_burn": {
+    "fh": 55,
+    "fps": 8,
+    "frames": 4,
+    "fw": 54,
+    "src": "assets/gv/enemy/beast_burn.png"
+  },
+  "enemy/beast_pillar": {
+    "fh": 160,
+    "fps": 12,
+    "frames": 2,
+    "fw": 76,
+    "src": "assets/gv/enemy/beast_pillar.png"
+  },
   "enemy/fire_skull": {
     "fh": 100,
     "fps": 12,
@@ -76,6 +118,20 @@ export const SPRITE_META = {
     "frames": 5,
     "fw": 48,
     "src": "assets/gv/enemy/hound_run.png"
+  },
+  "enemy/nightmare": {
+    "fh": 90,
+    "fps": 8,
+    "frames": 4,
+    "fw": 108,
+    "src": "assets/gv/enemy/nightmare.png"
+  },
+  "enemy/nightmare_gallop": {
+    "fh": 78,
+    "fps": 14,
+    "frames": 4,
+    "fw": 128,
+    "src": "assets/gv/enemy/nightmare_gallop.png"
   },
   "enemy/skeleton": {
     "fh": 46,
@@ -167,6 +223,13 @@ export const SPRITE_META = {
     "frames": 3,
     "fw": 18,
     "src": "assets/gv/fx/fireball.png"
+  },
+  "fx/lightbolt": {
+    "fh": 10,
+    "fps": 12,
+    "frames": 3,
+    "fw": 18,
+    "src": "assets/gv/fx/lightbolt.png"
   },
   "hero/attack": {
     "fh": 40,

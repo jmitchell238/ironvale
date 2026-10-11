@@ -92,7 +92,11 @@ The stage's solids are merged with the locked gate into `session.blockers` each 
 
 A stage without `tiles` would fall back to the older block-out drawing in `render.js`; no stage uses it now.
 
-The boss arena is part of the map: on Iron Caverns the gate is the arena's left wall, the throne room is a flat, walled hall one screen wide (`boss.arenaMinX` to `arenaMaxX`, which also bounds the player and camera while the boss lives), and the Warden spawns on its floor. The Warden is drawn from three strips (`enemy/warden`, `_windup`, `_slam`) picked from its slam state in `drawEnemy`, so the art follows the telegraph timings.
+The boss arena is part of the map: on every stage the gate is the arena's left wall, the arena is a flat, walled floor one screen wide (`boss.arenaMinX` to `arenaMaxX`, which also bounds the player and camera while the boss lives), and the boss spawns on it. Stage 1's arena holds the Nightmare, stage 2's the Hell Beast, stage 3's the angel (she spawns in the air; `boss.floorY` is where she lands, and `boss.camY` holds the camera up so her wings stay in view) and the throne room the Warden. The Warden is drawn from three strips (`enemy/warden`, `_windup`, `_slam`) picked from its slam state in `drawEnemy`, so the art follows the telegraph timings; the other bosses do the same from their own state fields (`nightmareFrame()`, `beastFrame()`, `angelFrame()`).
+
+## Bosses
+
+An enemy with `bossAi` hurts only through its own moves, which come back from `aiUpdateEnemy()` in the same shape as the Warden's slam (`{ hit, damage, knockback, dir }`) so the enemy system needs no special case. The shared fields are `bossState` (`idle`, `windup`, the attack, `recover`), `bossMove`, `bossT` and `bossCd`; the angel keeps her `swoopState` fields. The wind-up is the warning and nothing interrupts it (a hit still does damage). A `vis` field (0 to 1) lets the Hell Beast sink into the ground: below 0.3 it sets `untargetable`, which `resolveMeleeHits()` skips.
 
 ## Enemy names
 
@@ -102,7 +106,7 @@ The wizard (`wizard`, `ENEMY_CAST`, `tickEnemyCast()`) and the fire skull (`fire
 
 ## Enemy projectiles
 
-`domain/projectiles.js` holds shots in flight as plain objects (`makeProjectile(kind, ...)`, kinds in `ENEMY_PROJECTILES`). `tickProjectiles()` moves them and reports the ones that end: `hit` (the knight, only when not in i-frames, so a shot never hurts twice), `wall` (a stage solid), `out` (stage bounds) or `expired`. `cutProjectiles()` removes the ones inside the sword's box. `world/systems/projectiles.js` runs them each frame from `GameSession.update()`, calls `hurtPlayer()` with the shot's damage (already scaled by New Game+ when the enemy spawned) and drops the list on `loadLevel()` and `endRun()`. An enemy fires by setting `e.shot` to a new projectile; the enemy system spawns it. A later boss can do the same. `drawProjectiles()` in `renderStage.js` draws them.
+`domain/projectiles.js` holds shots in flight as plain objects (`makeProjectile(kind, ...)`, kinds in `ENEMY_PROJECTILES`). `tickProjectiles()` moves them and reports the ones that end: `hit` (the knight, only when not in i-frames, so a shot never hurts twice), `wall` (a stage solid), `out` (stage bounds) or `expired`. `cutProjectiles()` removes the ones inside the sword's box. `world/systems/projectiles.js` runs them each frame from `GameSession.update()`, calls `hurtPlayer()` with the shot's damage (already scaled by New Game+ when the enemy spawned) and drops the list on `loadLevel()` and `endRun()`. An enemy fires by setting `e.shot` to a new projectile, or an array of them for a volley; the enemy system spawns them. A shot with `g` (gravity) flies in an arc, which is how the Hell Beast lobs three fireballs, and the Fallen Angel's bolts use their own kind (`lightbolt`). `drawProjectiles()` in `renderStage.js` draws them.
 
 ## Body, sword and drawing are separate
 

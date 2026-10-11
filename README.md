@@ -2,7 +2,7 @@
 
 Small knight. A greater tomorrow.
 
-A 2D pixel-art action platformer. You play an apprentice knight who runs, jumps, climbs and cuts through skeletons, ghosts and wolves on the way to the Iron Warden. Between stages you train at the forge to get stronger.
+A 2D pixel-art action platformer. You play an apprentice knight who runs, jumps, climbs and cuts through skeletons, ghosts and wolves, with a boss waiting at the end of every stage and the Iron Warden last of all. Between stages you train at the forge to get stronger.
 
 Play at https://jmitchell238.github.io/ironvale/
 
@@ -22,7 +22,7 @@ You can install it as an app from the browser (Add to Home Screen on iPhone and 
 
 ## How it plays
 
-Each stage is a side-scrolling level with cliffs, ladders, bridges and floating islands. Enemies appear as you go; skeletons climb out of the ground. The gate at the end stays shut until every enemy in the stage is beaten. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage. Falling into the sea costs a heart and puts you back on the last solid ground.
+Each stage is a side-scrolling level with cliffs, ladders, bridges and floating islands. Enemies appear as you go; skeletons climb out of the ground. The gate at the end stays shut until every enemy in the stage is beaten. Past it is a walled boss arena: the gate closes behind you, the screen stops scrolling, and the stage is cleared when the boss falls. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage. Falling into the sea costs a heart and puts you back on the last solid ground.
 
 - The sword chains: keep pressing and the third hit of a chain does extra damage. A hit stops an enemy's wind-up.
 - Skeletons wind up before they swing, so you can see attacks coming.
@@ -35,7 +35,11 @@ Each stage is a side-scrolling level with cliffs, ladders, bridges and floating 
 - Wizards (stage 4, and once in stage 3's church) stand back and throw a fireball after a glowing wind-up. Duck or jump it, cut it with your sword, or rush in and hit the wizard to break the spell.
 - Fire Skulls (stage 4) hover over you, burst into flame and dive in a straight line at where you were standing. Step aside, then hit them as they drift back up.
 - Hearts hidden around the stage heal you.
+- The Nightmare (stage 1) is a spectral horse. It rears and stamps, red arrows show its lane, then it gallops the whole length of the arena. It is low, so jump over it (or double jump), then hit it while it skids to a stop at the wall. It gets faster when it is hurt.
+- The Hell Beast (stage 2) rises out of the bog and spits fireballs; hurt, it lobs three at a time in an arc. If you stand next to it, it ignites and a pillar of fire stands where it was, so back away when it glows. After a few attacks it sinks and comes up on the far side. You can cut a fireball with your sword.
+- The Fallen Angel (stage 3) hovers out of reach, spreads her wings, then dives at where you were standing. Step aside and hit her while she rests on the floor. When she is hurt she also throws a fan of light bolts.
 - The Iron Warden, at the end of the last stage, has a telegraphed ground slam.
+- Every boss warns before each attack, and a hit does not interrupt it. Its health bar and name float over it.
 
 ## Getting stronger
 
@@ -56,12 +60,12 @@ After you beat the Iron Warden, New Game+ appears on the menu. It keeps your kni
 
 ## Stages
 
-1. Forgegate Fields
-2. Forest Ramparts
-3. Forge Ruins
+1. Forgegate Fields, with the Nightmare
+2. Forest Ramparts, with the Hell Beast
+3. Forge Ruins, with the Fallen Angel
 4. Iron Caverns, with the Iron Warden
 
-The campaign goes from bright to dark: sunny sea cliffs, then swamp and forest, a gothic town and church, and finally a dark castle. All four stages are built, each with its own art. Iron Caverns is the darkest: castle halls, shafts to climb and drawbridges, ending in the Iron Warden's throne room. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
+The campaign goes from bright to dark: sunny sea cliffs, then swamp and forest, a gothic town and church, and finally a dark castle. All four stages are built, each with its own art and its own boss arena. Iron Caverns is the darkest: castle halls, shafts to climb and drawbridges, ending in the Iron Warden's throne room. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
 
 ## Credits
 

@@ -5,7 +5,7 @@
 
 import {
   W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, HEART, CONTROLS, PORTRAIT,
-  getEnemyMeleeCfg, ENEMY_CAST,
+  getEnemyMeleeCfg, ENEMY_CAST, ENEMY_BEAST, ENEMY_SWOOP,
 } from '../config/index.js';
 import { clamp } from '../core/math.js';
 import { getAttackBox, combatAttackDuration } from '../domain/combat.js';
@@ -397,6 +397,62 @@ function wizardFrame(e, key, entry, frame) {
   return { key, entry, frame };
 }
 
+/**
+ * The Nightmare idles and trots in enemy/nightmare, rears (the idle strip, quicker, lifted off the ground) through
+ * the wind-up and gallops in enemy/nightmare_gallop while it charges; the skid holds the braced gallop frame.
+ */
+function nightmareFrame(e, key, entry, frame) {
+  const gal = getSprite('enemy/nightmare_gallop');
+  const idle = getSprite('enemy/nightmare');
+  if (!gal || !gal.ready || !idle || !idle.ready) return { key, entry, frame };
+  if (e.bossState === 'charge') return { key: 'enemy/nightmare_gallop', entry: gal, frame: animFrame(gal.meta, e.phase, 1) };
+  if (e.bossState === 'skid') return { key: 'enemy/nightmare_gallop', entry: gal, frame: 2 };
+  const quick = e.bossState === 'windup' ? 2.2 : Math.abs(e.vx) > 5 ? 1.6 : 0.7;
+  return { key: 'enemy/nightmare', entry: idle, frame: animFrame(idle.meta, e.phase, quick) };
+}
+
+/**
+ * The Hell Beast has a strip per move: enemy/beast idles, _breath rears back to spit (frames 1-2 are the wind-up, 3 the
+ * spit), _burn ignites through the burn's wind-up and _pillar is the fire column that stands for its active frames.
+ * Progress comes from the state timers, so the art follows the telegraph exactly.
+ */
+function beastFrame(e, key, entry, frame) {
+  const cfg = ENEMY_BEAST[e.type];
+  const pick = (k, i) => {
+    const en = getSprite(k);
+    return en && en.ready ? { key: k, entry: en, frame: Math.max(0, Math.min(en.meta.frames - 1, i)) } : null;
+  };
+  const done = (total) => 1 - clamp(e.bossT / (total || 1), 0, 0.999);
+  let r = null;
+  if (!cfg) return { key, entry, frame };
+  if (e.bossState === 'windup' && e.bossMove === 'spit') r = pick('enemy/beast_breath', done(cfg.spit.windup) < 0.45 ? 1 : 2);
+  else if (e.bossState === 'recover' && e.bossMove === 'spit') r = done(cfg.spit.recover) < 0.5 ? pick('enemy/beast_breath', 3) : null;
+  else if (e.bossState === 'windup') r = pick('enemy/beast_burn', Math.floor(done(cfg.burn.windup) * 4));
+  else if (e.bossState === 'act') r = pick('enemy/beast_pillar', Math.floor(e.phase * 12) % 2);
+  else if (e.bossState === 'recover') r = pick('enemy/beast_burn', 3 - Math.floor(done(cfg.burn.recover) * 4));
+  if (!r) return { key, entry, frame };
+  return r;
+}
+
+/**
+ * The angel flaps in enemy/angel (idle strip) and spreads her wings in enemy/angel_smite through a wind-up; the dive
+ * tucks them in (the idle strip's folded frames) and the landing opens them again. Her art stands a little low in
+ * its cell, so `dy` lowers it until her hitbox (which starts at her feet) wraps the body.
+ */
+function angelFrame(e, key, entry, frame) {
+  const smite = getSprite('enemy/angel_smite');
+  const cfg = ENEMY_SWOOP[e.type];
+  const out = (k, en, f) => ({ key: k, entry: en, frame: f, dy: 20 });
+  if (!smite || !smite.ready || !cfg || !entry) return { key, entry, frame };
+  if (e.swoopState === 'windup') {
+    const total = e.swoopMove === 'volley' ? cfg.volley.windup : cfg.windup;
+    return out('enemy/angel_smite', smite, Math.min(2, Math.floor((1 - clamp(e.swoopT / total, 0, 0.999)) * 3)));
+  }
+  if (e.swoopState === 'dash') return out(key, entry, 2);
+  if (e.swoopState === 'land') return out(key, entry, 3);
+  return out(key, entry, frame);
+}
+
 /** The fire skull is a plain skull while it hovers and a burning one while it ignites and dives. */
 function skullFrame(e, key, entry, frame) {
   const en = getSprite('enemy/fire_skull_calm');
@@ -426,8 +482,46 @@ export function drawEnemy(ctx, e, cam, t) {
   if (e.skin === 'hound') ({ key, entry, frame } = houndFrame(e, key, entry, frame));
   if (e.skin === 'wizard') ({ key, entry, frame } = wizardFrame(e, key, entry, frame));
   if (e.skin === 'fire_skull') ({ key, entry, frame } = skullFrame(e, key, entry, frame));
+  let dy = 0;
+  if (e.skin === 'nightmare') ({ key, entry, frame } = nightmareFrame(e, key, entry, frame));
+  if (e.skin === 'beast') ({ key, entry, frame } = beastFrame(e, key, entry, frame));
+  if (e.skin === 'angel') ({ key, entry, frame, dy } = angelFrame(e, key, entry, frame));
+  // Stage bosses telegraph with bossState 'windup' (and the angel with swoopState, above).
   const warning = e.slamState === 'windup' || e.lungeState === 'crouch'
-    || e.castState === 'windup' || e.swoopState === 'windup';
+    || e.castState === 'windup' || e.swoopState === 'windup' || (e.bossAi && e.bossState === 'windup');
+  const winding = e.bossAi && e.bossState === 'windup';
+  const sink = e.vis != null && e.vis < 1 ? (1 - e.vis) * (entry?.meta.fh || 0) * scale : 0; // the beast in the bog
+  const lift = e.type === 'nightmare' && winding ? -Math.abs(Math.sin(t * 13)) * 9 : 0; // the horse stamps and rears
+
+  // The charge's lane: chevrons on the floor ahead of the rearing horse, along the way it will run.
+  if (e.type === 'nightmare' && winding) {
+    const dir = e.facing || -1;
+    ctx.save();
+    ctx.globalAlpha = 0.65 + 0.3 * Math.sin(t * 16);
+    ctx.fillStyle = '#ff3a1a';
+    for (let i = 1; i <= 9; i++) {
+      const cx = sx + dir * (e.w * 0.5 + i * 70);
+      ctx.beginPath();
+      ctx.moveTo(cx - dir * 20, sy - 26);
+      ctx.lineTo(cx + dir * 14, sy - 13);
+      ctx.lineTo(cx - dir * 20, sy);
+      ctx.lineTo(cx - dir * 8, sy - 13);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  // The burn's reach: a ring on the floor around the beast while it ignites.
+  if (e.skin === 'beast' && (winding && e.bossMove === 'burn')) {
+    const cfg = ENEMY_BEAST[e.type];
+    ctx.save();
+    ctx.globalAlpha = 0.55 + 0.3 * Math.sin(t * 18);
+    ctx.fillStyle = 'rgba(255,90,30,0.6)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy - 2, cfg.burn.half, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // Melee telegraph: ground / strike warning during windup/active
   if (e.slamState === 'windup' || e.slamState === 'slam') {
@@ -471,11 +565,19 @@ export function drawEnemy(ctx, e, cam, t) {
     ctx.restore();
   }
 
-  if (!e.swoops) { // a hovering skull casts no ground shadow
+  if (!e.swoops || e.swoopState === 'land') { // a hovering skull casts no ground shadow
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(sx, sy - 1, e.w * 0.4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (sink > 0) { // the beast rises and sinks behind a mound of bog, clipped at the ground line
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,28,16,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy - 2, 74 * (1 - 0.3 * e.vis), 10, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -499,24 +601,34 @@ export function drawEnemy(ctx, e, cam, t) {
 
   const pixel = !!(entry && entry.meta && entry.meta.fw && Number.isInteger(e.drawScale));
   const sopts = { scale, flip: (e.facing || -1) !== (e.artFaces || -1), ...spriteCam(cam), pixel };
-  const shake = e.swoopState === 'windup' ? Math.round(Math.sin(t * 70) * 3) : 0; // the skull trembles as it ignites
-  const ok = drawSprite(ctx, key, frame, e.x + shake, e.y + (pixel ? 0 : 2), sopts);
-  if (ok && (e.flash > 0 || warning)) {
-    const a = e.flash > 0 ? 0.85 : 0.25 + 0.25 * Math.sin(t * 24);
-    drawSprite(ctx, key, frame, e.x + shake, e.y + (pixel ? 0 : 2), { ...sopts, alpha: a, composite: 'lighter' });
+  const shake = e.swoopState === 'windup' && !e.bossAi ? Math.round(Math.sin(t * 70) * 3) : 0; // the skull trembles as it ignites
+  const py = e.y + (pixel ? 0 : 2) + dy + lift + sink;
+  if (sink > 0) { // everything below the ground line stays hidden
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, sy);
+    ctx.clip();
   }
+  const ok = drawSprite(ctx, key, frame, e.x + shake, py, sopts);
+  if (ok && (e.flash > 0 || warning)) {
+    const a = e.flash > 0 ? 0.85 : (e.bossAi ? 0.45 : 0.25) + 0.25 * Math.sin(t * 24); // a boss's warning glows brighter
+    drawSprite(ctx, key, frame, e.x + shake, py, { ...sopts, alpha: a, composite: 'lighter' });
+  }
+  if (sink > 0) ctx.restore();
   if (!ok) {
     ctx.fillStyle = warning ? '#c44' : e.color;
     ctx.fillRect(sx - e.w / 2, sy - e.h, e.w, e.h);
   }
 
   // Health bar and name sit above the art; the Warden's art is taller than its hitbox.
-  const hudH = e.skin === 'warden' ? (getSprite('enemy/warden')?.meta.fh || 126) * scale * 0.85 : e.h;
+  const hudArt = bossLike && e.skin !== 'warden' ? getSprite('enemy/' + e.skin)?.meta.fh : 0;
+  const hudH = e.skin === 'warden' ? (getSprite('enemy/warden')?.meta.fh || 126) * scale * 0.85
+    : hudArt ? hudArt * scale * 1.05 - dy : e.h;
   if (bossLike || e.hp < e.maxHp * 0.95) {
     const bw = Math.max(e.w, 28);
     const ratio = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    const barY = sy - (pixel ? hudH + 14 : e.h * scale * 0.55 + 10);
+    const barY = Math.max(sy - (pixel ? hudH + 14 : e.h * scale * 0.55 + 10), bossLike ? (PORTRAIT ? 152 : PLAY.top + 6) : -99); // a boss's bar stays below the HUD
     ctx.fillRect(sx - bw / 2, barY, bw, 4);
     ctx.fillStyle = ratio > 0.35 ? '#7dffa0' : '#e74c3c';
     ctx.fillRect(sx - bw / 2, barY, bw * ratio, 4);
@@ -527,7 +639,7 @@ export function drawEnemy(ctx, e, cam, t) {
     const label = e.label;
     ctx.font = 'bold 11px system-ui,sans-serif';
     const tw = ctx.measureText(label).width;
-    const ly = pixel ? sy - hudH - 26 : sy - e.h * scale * 0.55 - 22;
+    const ly = Math.max(pixel ? sy - hudH - 26 : sy - e.h * scale * 0.55 - 22, (PORTRAIT ? 152 : PLAY.top + 6) - 12);
     ctx.fillRect(sx - tw / 2 - 4, ly - 10, tw + 8, 14);
     ctx.fillStyle = '#f5e6c8';
     ctx.textAlign = 'center';
@@ -918,7 +1030,7 @@ export function drawSession(ctx, session, t, stick, bestScore) {
       ? `STAGE ${session.level.order}: ${session.level.name.toUpperCase()}`
       : ('STAGE ' + (session.wave || 1));
     let phaseLabel = '';
-    if (session.levelPhase === 'boss') phaseLabel = 'The Iron Warden';
+    if (session.levelPhase === 'boss') phaseLabel = session.enemies.find(e => e.isBoss)?.label || 'Boss fight';
     else if (session.isGateOpen?.()) phaseLabel = 'Gate open';
     else if (session.allEncountersFired?.() && session.enemies.length) {
       phaseLabel = `Defeat ${session.enemies.length} more ${session.enemies.length === 1 ? 'foe' : 'foes'} to open the gate`;

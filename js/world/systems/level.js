@@ -120,6 +120,7 @@ export function enterBossArena(session) {
   // Boss run has no mid-arena continue
   session.activeCheckpoint = null;
   session.arena = { minX: b.arenaMinX, maxX: b.arenaMaxX };
+  if (b.camY != null) session.arena.camY = b.camY; // a flier's arena holds the camera up so she stays in view
   const bossType = b.type || 'boss';
   const boss = spawnEnemy(session, bossType, {
     x: b.spawnX,
@@ -133,6 +134,9 @@ export function enterBossArena(session) {
     boss.homeX = boss.x;
     boss.homeY = boss.y;
     boss.isBoss = true;
+    boss.arenaMinX = b.arenaMinX;
+    boss.arenaMaxX = b.arenaMaxX;
+    boss.floorY = b.floorY ?? null; // where a flying boss lands (the arena floor)
   }
   session.shake = Math.max(session.shake, 2.5);
   session.blockers = session.level.solids || [];
