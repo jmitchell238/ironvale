@@ -13,6 +13,7 @@ import {
 import { ngPlusDamageMul, ngPlusHpMul } from '../../domain/rpg.js';
 import { playerCx, playerCy } from '../../domain/player.js';
 import { resolveSolids } from '../../domain/platforms.js';
+import { spawnProjectile } from './projectiles.js';
 
 /**
  * @param {import('../GameSession.js').GameSession} session
@@ -125,6 +126,19 @@ export function spawnEnemy(session, type, opts = {}) {
     slamT: 0,
     slamCd,
     slamHitDone: false,
+    lunges: !!def.lunges,
+    lungeState: 'idle',
+    lungeT: 0,
+    lungeCd: 0.5,
+    casts: !!def.casts,
+    castState: 'idle',
+    castT: 0,
+    castCd: 0,
+    shot: null,
+    swoops: !!def.swoops,
+    swoopState: 'hover',
+    swoopT: 0,
+    swoopCd: 0.8,
     spawnGrace: grace,
     /** Skeletons climb out of the ground before they act. */
     /** Which way the sprite art looks: -1 left, 1 right. */
@@ -182,6 +196,10 @@ export function updateEnemies(session, dt) {
   for (let i = session.enemies.length - 1; i >= 0; i--) {
     const e = session.enemies[i];
     const slamHit = updateEnemy(session, e, dt);
+    if (e.shot) {
+      spawnProjectile(session, e.shot);
+      e.shot = null;
+    }
     // Knocked off a cliff: count it as a kill
     const fallY = session.level?.bounds?.fallY;
     if (fallY != null && !e.fly && e.y > fallY) {

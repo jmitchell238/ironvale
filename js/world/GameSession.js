@@ -22,6 +22,7 @@ import {
 import { listLevels, getLevelById, maxLevelOrder } from '../domain/levels.js';
 
 import { updateCamera, getCameraBounds } from './systems/camera.js';
+import { updateProjectiles } from './systems/projectiles.js';
 import {
   doAttack as sysDoAttack,
   applyAttackHits as sysApplyAttackHits,
@@ -143,6 +144,8 @@ export class GameSession {
     this.stats = null;
     this.platforms = [];
     this.enemies = [];
+    /** Shots in flight from enemies (fireballs); see domain/projectiles.js. */
+    this.projectiles = [];
     this.coins = [];
     this.particles = [];
     /** Floating damage numbers / labels. */
@@ -261,6 +264,7 @@ export class GameSession {
     this.screen = 'over';
     this.overReason = reason || 'Fallen in battle!';
     this.audio.gameOver();
+    this.projectiles.length = 0;
     this.persistMeta();
     this.save.recordGameEnd(this.score, this.wave, this.kills);
     if (this.player) {
@@ -444,6 +448,8 @@ export class GameSession {
 
     updateEnemies(this, dt);
     if (this.screen !== 'play') return;
+    updateProjectiles(this, dt);
+    if (this.screen !== 'play') return;
 
     this._updateCoins(dt);
     this._updatePickups();
@@ -550,6 +556,7 @@ export class GameSession {
       stats: this.stats,
       platforms: this.platforms,
       enemies: this.enemies,
+      projectiles: this.projectiles,
       coins: this.coins,
       particles: this.particles,
       popups: this.popups,

@@ -28,6 +28,12 @@ Each stage is a side-scrolling level with cliffs, ladders, bridges and floating 
 - Skeletons wind up before they swing, so you can see attacks coming.
 - Bone Guards block hits from the front. Bait their swing or get behind them.
 - Ghosts float through walls and hurt you if they touch you. Wolves are fast and fragile.
+- Spiders in the swamp are small and low; duck or jump and swing to catch them.
+- Bog Things are slow and tough, with a long wind-up before each swipe.
+- Burning Ghouls in the town and church hit harder than skeletons. Hit them during the wind-up to stop the swing.
+- Hell Hounds (stages 3 and 4) crouch, then leap at you. Jump over the leap or step back, then hit them as they land.
+- Wizards (stage 4, and once in stage 3's church) stand back and throw a fireball after a glowing wind-up. Duck or jump it, cut it with your sword, or rush in and hit the wizard to break the spell.
+- Fire Skulls (stage 4) hover over you, burst into flame and dive in a straight line at where you were standing. Step aside, then hit them as they drift back up.
 - Hearts hidden around the stage heal you.
 - The Iron Warden, at the end of the last stage, has a telegraphed ground slam.
 
@@ -55,11 +61,11 @@ After you beat the Iron Warden, New Game+ appears on the menu. It keeps your kni
 3. Forge Ruins
 4. Iron Caverns, with the Iron Warden
 
-The campaign goes from bright to dark: sunny sea cliffs, then swamp and forest, a gothic town and church, and finally a dark castle. Forgegate Fields is finished. The other three still use a placeholder layout; see [docs/ROADMAP.md](docs/ROADMAP.md).
+The campaign goes from bright to dark: sunny sea cliffs, then swamp and forest, a gothic town and church, and finally a dark castle. All four stages are built, each with its own art. Iron Caverns is the darkest: castle halls, shafts to climb and drawbridges, ending in the Iron Warden's throne room. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
 
 ## Credits
 
-Pixel art by Luis Zuno ([@ansimuz](https://www.patreon.com/ansimuz)): Magic Cliffs Environment (CC-BY 3.0) and the Gothicvania packs (public domain). Details are in [assets/CREDITS.md](assets/CREDITS.md).
+Pixel art by Luis Zuno ([@ansimuz](https://www.patreon.com/ansimuz)): Magic Cliffs Environment (CC-BY 3.0) and the Gothicvania packs, including Swamp (public domain). Details are in [assets/CREDITS.md](assets/CREDITS.md).
 
 ## License
 

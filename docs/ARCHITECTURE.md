@@ -82,19 +82,27 @@ Leveling up during a stage only banks a point. Points are spent on the `allocate
 
 Stages are plain objects in `js/domain/levels.js`. Each has bounds, a spawn point, platforms, ladders, encounters, checkpoints, a gate, and optionally a boss. An encounter is a trigger X position plus a list of enemies to spawn when the player passes it. The gate opens once every encounter has fired and no enemies are left. On a stage with a boss, the boss spawns in an arena past the gate.
 
-Forgegate Fields is a tile-map stage. It's drawn on a 32 px grid with a few builder calls (`groundCells`, `fillCells`, ladders, coins, stamps), and `compileTileMap()` turns the grid into:
+All four stages (Forgegate Fields, Forest Ramparts, Forge Ruins and Iron Caverns) are tile-map stages. Each is drawn on a 32 px grid with a few builder calls (`groundCells`, `fillCells`, ladders, coins, stamps), and `compileTileMap()` turns the grid into:
 
 - **platforms**: the top of every ground run, plus one-way stone ledges, bridges and floating islands
 - **solids**: rectangles that block the player and enemies from the sides and from below
-- **tiles**: the grid itself, which `renderStage.js` reads to choose grass tops, cliff edges and fill for each cell
+- **tiles**: the grid itself, which `renderStage.js` reads to choose tops, edges and fill for each cell. The map's `theme` picks the tileset, tile rules and parallax background (`THEMES` in `renderStage.js`) and the scenery stamps (`STAMPS` in `levels.js`)
 
 The stage's solids are merged with the locked gate into `session.blockers` each frame. Falling below `bounds.fallY` costs a heart and returns the player to the last solid ground they stood on; enemies knocked off a cliff count as kills.
 
-Stages without `tiles` (stages 2–4 for now) are drawn by the older code in `render.js`.
+A stage without `tiles` would fall back to the older block-out drawing in `render.js`; no stage uses it now.
+
+The boss arena is part of the map: on Iron Caverns the gate is the arena's left wall, the throne room is a flat, walled hall one screen wide (`boss.arenaMinX` to `arenaMaxX`, which also bounds the player and camera while the boss lives), and the Warden spawns on its floor. The Warden is drawn from three strips (`enemy/warden`, `_windup`, `_slam`) picked from its slam state in `drawEnemy`, so the art follows the telegraph timings.
 
 ## Enemy names
 
-The enemy type ids are older than the art. In code they are still `goblin`, `bat` and `shield_skeleton`; on screen they are a skeleton, a ghost and a Bone Guard. `wolf` and `iron_warden` match.
+The enemy type ids are older than the art. In code they are still `goblin`, `bat` and `shield_skeleton`; on screen they are a skeleton, a ghost and a Bone Guard. `wolf` and `iron_warden` match. `spider`, `thing`, `burning_ghoul` and `hell_hound` are the new ones; the hound is the only enemy with a leap (`ENEMY_LUNGE` in the config, `tickEnemyLunge()` in `enemyAi.js`).
+
+The wizard (`wizard`, `ENEMY_CAST`, `tickEnemyCast()`) and the fire skull (`fire_skull`, `ENEMY_SWOOP`, `tickEnemySwoop()`) follow the same pattern: a state machine in `enemyAi.js` whose wind-up is the warning and which a hit cancels, with the strip chosen in `render.js` (`wizardFrame()`, `skullFrame()`).
+
+## Enemy projectiles
+
+`domain/projectiles.js` holds shots in flight as plain objects (`makeProjectile(kind, ...)`, kinds in `ENEMY_PROJECTILES`). `tickProjectiles()` moves them and reports the ones that end: `hit` (the knight, only when not in i-frames, so a shot never hurts twice), `wall` (a stage solid), `out` (stage bounds) or `expired`. `cutProjectiles()` removes the ones inside the sword's box. `world/systems/projectiles.js` runs them each frame from `GameSession.update()`, calls `hurtPlayer()` with the shot's damage (already scaled by New Game+ when the enemy spawned) and drops the list on `loadLevel()` and `endRun()`. An enemy fires by setting `e.shot` to a new projectile; the enemy system spawns it. A later boss can do the same. `drawProjectiles()` in `renderStage.js` draws them.
 
 ## Body, sword and drawing are separate
 

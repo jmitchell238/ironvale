@@ -3,15 +3,15 @@
 The campaign goes from bright to dark, one look per stage:
 
 1. **Forgegate Fields**: sunny sea cliffs (Magic Cliffs). Done.
-2. **Forest Ramparts**: swamp and forest (Gothicvania Swamp).
-3. **Forge Ruins**: gothic town and church (Gothicvania Town and Church).
-4. **Iron Caverns**: a dark castle and the Iron Warden (Gothicvania castle tiles, demon sprite for the boss).
+2. **Forest Ramparts**: swamp and forest (Gothicvania Swamp). Done.
+3. **Forge Ruins**: gothic town and church (Gothicvania Town and Church). Done.
+4. **Iron Caverns**: a dark castle and the Iron Warden (Gothicvania Old Dark Castle tiles and Gothic Castle hall, Demon sprite for the boss). Done.
+
+All four stages are built as tile maps with their own theme.
 
 ## Unfinished
 
-- **Stages 2 and 3** use `stubBiome()`, a shared placeholder layout with one skeleton and one ghost. They need tile-map layouts, encounters and their own tilesets.
-- **Stage 4** has its own encounters and the Iron Warden, but still sits on the placeholder layout, and the Warden has no sprite yet.
-- **Tile renderer** only knows the Magic Cliffs tileset. It needs a per-stage tile table.
+- The Iron Warden has one attack (the telegraphed breath slam); a second move or phase would suit a final boss.
 
 ## Not started
 

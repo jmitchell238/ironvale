@@ -12,10 +12,11 @@
 
 export const TILE = 32;
 
-export function createTileMap(cols, rows) {
+/** @param {string} [theme] look of the stage ('cliffs', 'swamp'); the renderer and STAMPS key on it */
+export function createTileMap(cols, rows, theme = 'cliffs') {
   const cells = [];
   for (let r = 0; r < rows; r++) cells.push(new Array(cols).fill('.'));
-  return { cols, rows, cells, ladders: [], stamps: [], coins: [], pickups: [], props: [] };
+  return { theme, cols, rows, cells, ladders: [], stamps: [], coins: [], pickups: [], props: [] };
 }
 
 export function cellAt(map, c, r) {
@@ -107,6 +108,6 @@ export function compileTileMap(map) {
     coins: map.coins.map(([c, r]) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 })),
     pickups: map.pickups.map(p => ({ type: p.type, x: p.c * TILE + TILE / 2, y: p.r * TILE + TILE / 2 })),
     props: map.props.slice(),
-    tiles: { cols: map.cols, rows: map.rows, size: TILE, cells: map.cells, stamps: map.stamps },
+    tiles: { theme: map.theme, cols: map.cols, rows: map.rows, size: TILE, cells: map.cells, stamps: map.stamps },
   };
 }

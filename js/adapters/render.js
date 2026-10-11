@@ -5,15 +5,15 @@
 
 import {
   W, H, PLAY, GROUND_Y, PLAYER_DRAW, PLAYER_SWORD, PLAYER_BODY, HEART, CONTROLS, PORTRAIT,
-  getEnemyMeleeCfg,
+  getEnemyMeleeCfg, ENEMY_CAST,
 } from '../config/index.js';
 import { clamp } from '../core/math.js';
 import { getAttackBox, combatAttackDuration } from '../domain/combat.js';
 import { getSprite, animFrame, drawSprite, drawImageKey } from './sprites.js';
 import { getLevelById } from '../domain/levels.js';
 import {
-  drawCliffsBackground, drawTiles, drawStamps, drawLaddersPixel, drawPixelGate,
-  drawFlags, drawPickups, drawEffects, drawPopups,
+  drawStageBackground, drawTiles, drawStamps, drawLaddersPixel, drawPixelGate,
+  drawFlags, drawPickups, drawEffects, drawPopups, drawProjectiles,
 } from './renderStage.js';
 
 function camOf(cam) {
@@ -240,7 +240,8 @@ export function drawLadders(ctx, ladders, cam) {
       const th = 24;
       for (let yy = 0; yy < l.h; yy += th) {
         const hh = Math.min(th, l.h - yy);
-        ctx.drawImage(tile.img, x - tw / 2, y + yy, tw, hh);
+        // Only rows 5-58 of the picture are drawn (the rest is empty), so the rungs run on.
+        ctx.drawImage(tile.img, 0, 5, 32, Math.round(hh * 54 / th), x - tw / 2, y + yy, tw, hh);
       }
     } else {
       ctx.fillStyle = '#8a6238';
@@ -335,6 +336,74 @@ export function drawPlayer(ctx, p, t, cam, stats) {
   }
 }
 
+/**
+ * The Warden has one strip per state (sprite keys enemy/warden, _windup, _slam): it crouches and rears
+ * up through the wind-up, breathes frost on the slam, then settles back to the idle hover.
+ * Progress comes from the slam timer, so the art follows the telegraph exactly.
+ */
+function wardenFrame(e, key, entry, frame) {
+  const cfg = e.meleeCfg || getEnemyMeleeCfg(e);
+  const pick = (k, i) => {
+    const en = getSprite(k);
+    return en && en.ready ? { key: k, entry: en, frame: Math.max(0, Math.min(en.meta.frames - 1, i)) } : null;
+  };
+  const left = (total) => 1 - clamp(e.slamT / (total || 1), 0, 0.999);
+  let r = null;
+  if (e.slamState === 'windup') r = pick('enemy/warden_windup', Math.floor(left(cfg.windup) * 5));
+  else if (e.slamState === 'slam') r = pick('enemy/warden_slam', Math.floor(left(cfg.active) * 3));
+  else if (e.slamState === 'recover') {
+    const p = left(cfg.recover);
+    if (p < 0.4) r = pick('enemy/warden_slam', p < 0.2 ? 3 : 4);
+  }
+  return r || { key, entry, frame };
+}
+
+/**
+ * The hell hound has a strip per gait (enemy/hound walk, _idle, _run) and one for the leap (_jump):
+ * frame 1 is the crouch, 2-4 the flight, 5 the landing. The leap frame follows the airborne time.
+ */
+function houndFrame(e, key, entry, frame) {
+  const pick = (k, i) => {
+    const en = getSprite(k);
+    return en && en.ready ? { key: k, entry: en, frame: Math.max(0, Math.min(en.meta.frames - 1, i)) } : null;
+  };
+  let r = null;
+  if (e.lungeState === 'crouch') r = pick('enemy/hound_jump', 1);
+  else if (e.lungeState === 'leap') r = pick('enemy/hound_jump', 2 + Math.floor(clamp(e.lungeT / 0.44, 0, 0.999) * 3));
+  else if (e.lungeState === 'recover') r = pick('enemy/hound_jump', 5);
+  else if (Math.abs(e.vx) > 120) r = pick('enemy/hound_run', 0);
+  else if (Math.abs(e.vx) <= 5) r = pick('enemy/hound_idle', 0);
+  if (!r) return { key, entry, frame };
+  if (r.frame === 0 && r.key !== 'enemy/hound_jump') r.frame = animFrame(r.entry.meta, e.phase, 1);
+  return r;
+}
+
+/**
+ * The wizard idles in enemy/wizard and casts in enemy/wizard_cast: frames 1-5 charge the fireball
+ * through the wind-up, 6-9 are the throw and follow-through, so the art tracks the telegraph timers.
+ */
+function wizardFrame(e, key, entry, frame) {
+  const cfg = ENEMY_CAST[e.type];
+  const en = getSprite('enemy/wizard_cast');
+  if (!cfg || !en || !en.ready) return { key, entry, frame };
+  if (e.castState === 'windup') {
+    const done = 1 - clamp(e.castT / cfg.windup, 0, 0.999);
+    return { key: 'enemy/wizard_cast', entry: en, frame: 1 + Math.floor(done * 5) };
+  }
+  if (e.castState === 'recover') {
+    const done = 1 - clamp(e.castT / cfg.recover, 0, 0.999);
+    return { key: 'enemy/wizard_cast', entry: en, frame: 6 + Math.floor(done * 4) };
+  }
+  return { key, entry, frame };
+}
+
+/** The fire skull is a plain skull while it hovers and a burning one while it ignites and dives. */
+function skullFrame(e, key, entry, frame) {
+  const en = getSprite('enemy/fire_skull_calm');
+  if (e.swoopState === 'windup' || e.swoopState === 'dash' || !en || !en.ready) return { key, entry, frame };
+  return { key: 'enemy/fire_skull_calm', entry: en, frame: animFrame(en.meta, e.phase, 1) };
+}
+
 export function drawEnemy(ctx, e, cam, t) {
   const sx = wx(e.x, cam);
   const sy = wy(e.y, cam);
@@ -353,6 +422,12 @@ export function drawEnemy(ctx, e, cam, t) {
   }
   const bossLike = !!(e.isBoss || e.type === 'iron_warden');
   const scale = e.drawScale || (e.type === 'iron_warden' ? 1.35 : 1.15);
+  if (e.skin === 'warden') ({ key, entry, frame } = wardenFrame(e, key, entry, frame));
+  if (e.skin === 'hound') ({ key, entry, frame } = houndFrame(e, key, entry, frame));
+  if (e.skin === 'wizard') ({ key, entry, frame } = wizardFrame(e, key, entry, frame));
+  if (e.skin === 'fire_skull') ({ key, entry, frame } = skullFrame(e, key, entry, frame));
+  const warning = e.slamState === 'windup' || e.lungeState === 'crouch'
+    || e.castState === 'windup' || e.swoopState === 'windup';
 
   // Melee telegraph: ground / strike warning during windup/active
   if (e.slamState === 'windup' || e.slamState === 'slam') {
@@ -396,30 +471,52 @@ export function drawEnemy(ctx, e, cam, t) {
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath();
-  ctx.ellipse(sx, sy - 1, e.w * 0.4, 3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  if (!e.swoops) { // a hovering skull casts no ground shadow
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy - 1, e.w * 0.4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
-  const pixel = !!(entry && entry.meta && entry.meta.fw && e.drawScale === 2);
+  // The wizard's charging fireball glows brighter as the cast nears its release.
+  if (e.castState === 'windup') {
+    const cfg = ENEMY_CAST[e.type];
+    const k = cfg ? 1 - clamp(e.castT / cfg.windup, 0, 1) : 0.5;
+    const gx = sx - (e.facing || -1) * 33;
+    const gy = sy - e.h * 0.9;
+    const r = 14 + k * 26;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, r);
+    g.addColorStop(0, `rgba(255,190,80,${0.35 + 0.5 * k})`);
+    g.addColorStop(1, 'rgba(255,100,20,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
+    ctx.restore();
+  }
+
+  const pixel = !!(entry && entry.meta && entry.meta.fw && Number.isInteger(e.drawScale));
   const sopts = { scale, flip: (e.facing || -1) !== (e.artFaces || -1), ...spriteCam(cam), pixel };
-  const ok = drawSprite(ctx, key, frame, e.x, e.y + (pixel ? 0 : 2), sopts);
-  if (ok && (e.flash > 0 || e.slamState === 'windup')) {
+  const shake = e.swoopState === 'windup' ? Math.round(Math.sin(t * 70) * 3) : 0; // the skull trembles as it ignites
+  const ok = drawSprite(ctx, key, frame, e.x + shake, e.y + (pixel ? 0 : 2), sopts);
+  if (ok && (e.flash > 0 || warning)) {
     const a = e.flash > 0 ? 0.85 : 0.25 + 0.25 * Math.sin(t * 24);
-    drawSprite(ctx, key, frame, e.x, e.y + (pixel ? 0 : 2), { ...sopts, alpha: a, composite: 'lighter' });
+    drawSprite(ctx, key, frame, e.x + shake, e.y + (pixel ? 0 : 2), { ...sopts, alpha: a, composite: 'lighter' });
   }
   if (!ok) {
-    ctx.fillStyle = e.slamState === 'windup' ? '#c44' : e.color;
+    ctx.fillStyle = warning ? '#c44' : e.color;
     ctx.fillRect(sx - e.w / 2, sy - e.h, e.w, e.h);
   }
 
+  // Health bar and name sit above the art; the Warden's art is taller than its hitbox.
+  const hudH = e.skin === 'warden' ? (getSprite('enemy/warden')?.meta.fh || 126) * scale * 0.85 : e.h;
   if (bossLike || e.hp < e.maxHp * 0.95) {
     const bw = Math.max(e.w, 28);
     const ratio = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    const barY = sy - (pixel ? e.h + 14 : e.h * scale * 0.55 + 10);
+    const barY = sy - (pixel ? hudH + 14 : e.h * scale * 0.55 + 10);
     ctx.fillRect(sx - bw / 2, barY, bw, 4);
     ctx.fillStyle = ratio > 0.35 ? '#7dffa0' : '#e74c3c';
     ctx.fillRect(sx - bw / 2, barY, bw * ratio, 4);
@@ -430,7 +527,7 @@ export function drawEnemy(ctx, e, cam, t) {
     const label = e.label;
     ctx.font = 'bold 11px system-ui,sans-serif';
     const tw = ctx.measureText(label).width;
-    const ly = sy - e.h * scale * 0.55 - 22;
+    const ly = pixel ? sy - hudH - 26 : sy - e.h * scale * 0.55 - 22;
     ctx.fillRect(sx - tw / 2 - 4, ly - 10, tw + 8, 14);
     ctx.fillStyle = '#f5e6c8';
     ctx.textAlign = 'center';
@@ -657,7 +754,7 @@ export function drawIdleDecor(ctx, t) {
   const span = Math.max(1, L.bounds.maxX - W);
   const k = (Math.sin(t * 0.05) + 1) / 2;
   const cam = { x: Math.round(k * span), y: Math.round(L.bounds.maxY - H) };
-  drawCliffsBackground(ctx, cam);
+  drawStageBackground(ctx, cam, L.theme);
   drawStamps(ctx, L.tiles, cam, 'back');
   drawStamps(ctx, L.tiles, cam, 'mid');
   drawTiles(ctx, L.tiles, cam);
@@ -767,7 +864,7 @@ export function drawSession(ctx, session, t, stick, bestScore) {
   } else if (inWorld && session.player && session.level?.tiles) {
     const pc = { x: Math.round(cam.x), y: Math.round(cam.y) };
     const tiles = session.level.tiles;
-    drawCliffsBackground(ctx, pc);
+    drawStageBackground(ctx, pc, session.level.theme);
     drawStamps(ctx, tiles, pc, 'back');
     drawStamps(ctx, tiles, pc, 'mid');
     drawTiles(ctx, tiles, pc);
@@ -781,6 +878,7 @@ export function drawSession(ctx, session, t, stick, bestScore) {
     for (const c of session.coins) drawCoin(ctx, c, t, pc);
     for (const e of session.enemies) drawEnemy(ctx, e, pc, t);
     drawPlayer(ctx, session.player, t, pc, session.stats);
+    drawProjectiles(ctx, session.projectiles, pc);
     drawEffects(ctx, session.effects, pc);
     drawStamps(ctx, tiles, pc, 'front');
     drawParticles(ctx, session.particles, pc);

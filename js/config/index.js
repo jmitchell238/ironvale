@@ -211,11 +211,47 @@ export const ENEMIES = {
     color: '#d8dce0', damage: 12, skin: 'wolf', drawScale: 2,
     aggroX: 340, label: 'Wolf', artFaces: 1,
   },
+  /** Low swamp crawler — short enough that the knight ducks or jumps to cut it. */
+  spider: {
+    w: 44, h: 28, hp: 10, speed: 105, score: 8, xp: 2,
+    color: '#b0304a', damage: 8, skin: 'spider', drawScale: 2,
+    aggroX: 260, label: 'Spider',
+  },
+  /** Bog creature — slow and tanky, slaps with a long wind-up. */
+  thing: {
+    w: 38, h: 74, hp: 60, speed: 34, score: 22, xp: 4,
+    color: '#4aa83a', damage: 20, skin: 'thing', drawScale: 2,
+    hasMelee: true, label: 'Bog Thing',
+  },
+  /** Burning ghoul — tough brawler, hits harder than a skeleton. */
+  burning_ghoul: {
+    w: 40, h: 88, hp: 56, speed: 72, score: 24, xp: 5,
+    color: '#e8782a', damage: 20, skin: 'ghoul', drawScale: 2,
+    hasMelee: true, label: 'Burning Ghoul',
+  },
+  /** Hell hound — faster and tougher than a wolf; leaps at the knight when close. */
+  hell_hound: {
+    w: 70, h: 44, hp: 30, speed: 205, score: 20, xp: 4,
+    color: '#c0502a', damage: 14, skin: 'hound', drawScale: 2,
+    aggroX: 360, label: 'Hell Hound', lunges: true,
+  },
+  /** Hooded wizard — keeps its distance and throws a slow, telegraphed fireball. */
+  wizard: {
+    w: 34, h: 84, hp: 24, speed: 62, score: 26, xp: 5,
+    color: '#8a3aa8', damage: 16, skin: 'wizard', drawScale: 2,
+    casts: true, label: 'Wizard',
+  },
+  /** Fire skull — hovers over the knight, ignites, then dives in a straight line. */
+  fire_skull: {
+    w: 56, h: 100, hp: 20, speed: 90, score: 22, xp: 4,
+    color: '#e8602a', damage: 14, skin: 'fire_skull', drawScale: 1,
+    fly: true, swoops: true, label: 'Fire Skull',
+  },
   /** Campaign finale — Iron Caverns. */
   iron_warden: {
-    w: 72, h: 88, hp: 420, speed: 36, score: 400, xp: 50,
+    w: 100, h: 124, hp: 420, speed: 36, score: 400, xp: 50,
     color: '#6a5a48', damage: 28, skin: 'warden', frames: 4, fw: 96, fh: 112,
-    isBoss: true, drawScale: 1.35, label: 'The Iron Warden',
+    isBoss: true, drawScale: 2, label: 'The Iron Warden',
     hasMelee: true, hasSlam: true,
   },
 };
@@ -258,11 +294,64 @@ export const ENEMY_MELEE = {
     range: 60, windup: 0.48, active: 0.14, recover: 0.42, cooldown: 0.90,
     damageMul: 1.05, knockback: 180, aggroY: 52,
   },
+  thing: {
+    range: 62, windup: 0.62, active: 0.14, recover: 0.5, cooldown: 1.1,
+    damageMul: 1.1, knockback: 200, aggroY: 52,
+  },
+  burning_ghoul: {
+    range: 64, windup: 0.46, active: 0.14, recover: 0.38, cooldown: 0.8,
+    damageMul: 1.1, knockback: 190, aggroY: 54,
+  },
   iron_warden: {
     range: 88, windup: 0.62, active: 0.22, recover: 0.72, cooldown: 1.20,
     damageMul: 1.5, knockback: 340, aggroY: 70, heavy: true,
   },
 };
+
+/**
+ * Hell hound leap: crouch (readable, can be interrupted by a hit), a committed
+ * jump of about lungeSpeed * air time, then a recover and a long cooldown.
+ * Keys: min/max (horizontal range that starts it), aggroY, crouch, speed, jump, recover, cooldown
+ */
+export const ENEMY_LUNGE = {
+  hell_hound: {
+    min: 70, max: 170, aggroY: 50, crouch: 0.4, speed: 270, jump: 340, recover: 0.5, cooldown: 2.2,
+  },
+};
+
+/**
+ * Wizard cast: stands between retreat and range of the knight (same level only),
+ * winds up (readable, a hit cancels it), releases one projectile, recovers; the
+ * cooldown counts from the release so fireballs are never closer than that.
+ * Keys: range, retreat, aggroY, windup, recover, cooldown, projectile, speed, damageMul, muzzle (fraction of height)
+ */
+export const ENEMY_CAST = {
+  wizard: {
+    range: 440, retreat: 170, aggroY: 80, windup: 0.6, recover: 0.45, cooldown: 2.4,
+    projectile: 'fireball', speed: 260, damageMul: 1.0, muzzle: 0.7,
+  },
+};
+
+/**
+ * Fire skull swoop: hover above the knight, telegraph (it ignites, tracking), then dash
+ * along the line locked at take-off, then drift back up and wait out the cooldown.
+ * Keys: range (max distance that starts it), minDist, windup, speed, overshoot, maxDash, recover, cooldown, hoverAbove
+ */
+export const ENEMY_SWOOP = {
+  fire_skull: {
+    range: 420, minDist: 90, windup: 0.6, speed: 400, overshoot: 70, maxDash: 0.8,
+    recover: 0.9, cooldown: 2.0, hoverAbove: [110, 190],
+  },
+};
+
+/**
+ * Projectiles shot by enemies (domain/projectiles.js). w/h are the hitbox, life is seconds.
+ * The sprite strip flies left; the renderer turns it to face the velocity.
+ */
+export const ENEMY_PROJECTILES = {
+  fireball: { w: 30, h: 18, life: 3.2, sprite: 'fx/fireball', scale: 3 },
+};
+export const MAX_PROJECTILES = 24;
 
 /** Heavy slam profile (Iron Warden). */
 export const BOSS_SLAM = ENEMY_MELEE.iron_warden;

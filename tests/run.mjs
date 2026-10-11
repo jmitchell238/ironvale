@@ -624,7 +624,7 @@ section('session clear without banked points → clear screen');
   assertEq(s.screen, 'clear', 'clear when no points');
 }
 
-section('stub biomes exist');
+section('later stages exist with checkpoints');
 {
   for (const id of ['forest-ramparts', 'forge-ruins', 'iron-caverns']) {
     const L = levels.getLevelById(id);
@@ -763,17 +763,24 @@ section('solid collision: walls push, ceilings bump, tops land');
   assert(hasHeadroom(150, 400, 26, 70, ceil), 'room in the open');
 }
 
-section('Forgegate Fields is a full tile stage');
-{
-  const L = levels.getLevelById('forgegate-fields');
+// Every finished tile-map stage gets the same layout checks and the same bot run.
+const tileStages = levels.listLevels().filter(l => l.tiles && !l.stub);
+assertEq(tileStages.length, 4, 'all four stages are tile maps');
+
+for (const L of tileStages) {
+  section(`${L.name} is a full tile stage`);
   assert(L.tiles && L.solids?.length > 0, 'tile map + solids');
+  assert(L.theme === L.tiles.theme, 'stage theme matches its tile map');
   assert(L.bounds.maxX >= 5000, 'several screens long');
   assert(L.encounters.length >= 6, 'plenty of fights');
   assert(L.checkpoints.length >= 2, 'two checkpoints');
   assert(L.coins.length >= 40, 'coins to collect');
   assert(L.pickups.filter(p => p.type === 'heart').length >= 2, 'hearts to find');
+  assert(L.ladders.length >= 1, 'a ladder');
   const roster = new Set(L.encounters.flatMap(e => e.enemies.map(x => x.type)));
-  assert(roster.has('wolf'), 'wolves appear');
+  const dog = tileStages.indexOf(L) >= 2 ? 'hell_hound' : 'wolf';
+  assert(roster.has(dog), `${dog}s appear`);
+  if (dog === 'hell_hound') assert(!roster.has('wolf'), 'hounds replace wolves in stages 3 and 4');
   const plats = levels.buildLevelPlatforms(L);
   const onPlat = (x, y) => plats.some(p => x >= p.x && x <= p.x + p.w && Math.abs(p.y - y) < 1);
   assert(onPlat(L.spawn.x, L.spawn.y), 'spawn stands on ground');
@@ -785,16 +792,22 @@ section('Forgegate Fields is a full tile stage');
     }
   }
   for (const lad of L.ladders) assert(onPlat(lad.x, lad.y), 'ladder top is a ledge');
+  for (const pk of L.pickups) {
+    assert(!L.solids.some(r => pk.x > r.x && pk.x < r.x + r.w && pk.y > r.y && pk.y < r.y + r.h), 'pickup is not inside rock');
+  }
+  for (const c of L.coins) {
+    assert(!L.solids.some(r => c.x > r.x && c.x < r.x + r.w && c.y > r.y && c.y < r.y + r.h), 'coin is not inside rock');
+  }
 }
 
-section('a simple bot can run stage 1 end to end');
-{
+for (const L of tileStages) {
+  section(`a simple bot can run ${L.name} end to end`);
   const s = createSession();
-  s.loadLevel('forgegate-fields');
+  s.loadLevel(L.id);
   const plats = s.platforms;
   const groundAhead = (x, y) => plats.some(p => x >= p.x && x <= p.x + p.w && p.y >= y - 4 && p.y <= y + 70);
   let lastX = 0, stuck = 0, held = 0, maxX = 0;
-  for (let f = 0; f < 60 * 120 && s.screen === 'play'; f++) {
+  const step = (f) => {
     const p = s.player;
     let jump = false;
     stuck = Math.abs(p.x - lastX) < 0.5 ? stuck + 1 : 0;
@@ -806,9 +819,44 @@ section('a simple bot can run stage 1 end to end');
     p.hp = p.maxHp;
     s.update(1 / 60, { x: 1, y: stuck > 40 ? -1 : 0, jump, attack: f % 14 === 0 });
     maxX = Math.max(maxX, s.player.x);
-  }
+  };
+  for (let f = 0; f < 60 * 120 && s.screen === 'play'; f++) step(f);
   assert(maxX >= s.level.gate.x - 80, `bot reaches the gate (got ${Math.round(maxX)})`);
   assert(s.kills >= 6, 'bot fought its way through');
+  if (L.boss) {
+    // With the fights done, the same bot walks through the gate into the boss arena.
+    for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+    s.enemies.length = 0;
+    for (let f = 0; f < 60 * 20 && s.levelPhase !== 'boss' && s.screen === 'play'; f++) step(f);
+    assertEq(s.levelPhase, 'boss', 'bot walks into the boss arena');
+    for (let f = 0; f < 30; f++) step(f);
+    assert(s.player.x >= L.boss.arenaMinX && s.player.x <= L.boss.arenaMaxX, 'bot is inside the arena');
+  }
+}
+
+section('Iron Warden arena sits inside the stage on one flat floor');
+{
+  const L = levels.getLevelById('iron-caverns');
+  const b = L.boss;
+  assertEq(b.type, 'iron_warden', 'final boss');
+  assert(b.arenaMinX >= L.bounds.minX && b.arenaMaxX <= L.bounds.maxX, 'arena inside the stage bounds');
+  assert(b.spawnX > b.arenaMinX + 24 && b.spawnX < b.arenaMaxX - 24, 'Warden spawns inside the arena');
+  assert(b.arenaMaxX - b.arenaMinX >= config.W, 'arena is at least a screen wide');
+  assert(L.gate.x + L.gate.w <= b.arenaMinX && L.gateX < b.arenaMinX, 'the gate is the arena\'s left wall');
+  const plats = levels.buildLevelPlatforms(L);
+  const floor = plats.find(p => b.spawnX >= p.x && b.spawnX <= p.x + p.w && Math.abs(p.y - b.spawnY) < 1);
+  assert(floor, 'Warden spawns on a platform');
+  assert(floor.x <= b.arenaMinX && floor.x + floor.w >= b.arenaMaxX, 'one platform covers the whole arena floor');
+  const inArena = L.solids.filter(r => r.x + r.w > b.arenaMinX && r.x < b.arenaMaxX && r.y + r.h > b.spawnY - 200 && r.y < b.spawnY);
+  assertEq(inArena.length, 0, 'no walls or blocks standing in the arena floor space');
+  const s = createSession();
+  s.loadLevel('iron-caverns');
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  s.enemies.length = 0;
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  const boss = s.enemies.find(e => e.isBoss);
+  assert(boss && Math.abs(boss.x - b.spawnX) < 1 && Math.abs(boss.y - b.spawnY) < 1, 'Warden appears at the spawn point');
 }
 
 section('combat feel: buffer, combo finisher, interrupt');
@@ -917,6 +965,358 @@ section('enemies face the way they move; coins touch the body');
   const before = s.coinsCollected;
   s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
   assertEq(s.coinsCollected, before + 1, 'coin by the shoulder is collected');
+}
+
+section('new enemies: spider, bog thing, burning ghoul, hell hound');
+{
+  const { ENEMIES, ENEMY_MELEE, ENEMY_LUNGE, getEnemyMeleeCfg } = config;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const floor = [{ x: 0, y: GROUND_Y, w: 2000, h: 40, ground: true }];
+  const mk = (type, x, extra = {}) => ({
+    type, x, y: GROUND_Y, w: ENEMIES[type].w, h: ENEMIES[type].h, hp: ENEMIES[type].hp,
+    speed: ENEMIES[type].speed, damage: ENEMIES[type].damage, vx: 0, vy: 0, onGround: true,
+    facing: -1, homeX: x, homeY: GROUND_Y, patrolMin: x - 300, patrolMax: x + 300,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0,
+    hasMelee: !!ENEMIES[type].hasMelee, lunges: !!ENEMIES[type].lunges,
+    slamState: 'idle', slamT: 0, slamCd: 0, slamHitDone: false, ...extra,
+  });
+  const knight = (over = {}) => ({
+    x: 500, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h, facing: 1, onGround: true,
+    attacking: true, attackAir: false, attackHitDone: false, attackT: 0.2, combo: 0, ...over,
+  });
+  const stats = { rangeMul: 1, damage: 20 };
+
+  // Spider: short, fragile, and reachable by a standing, ducking and jumping swing
+  const sp = ENEMIES.spider;
+  assert(sp.hp < ENEMIES.goblin.hp && sp.h <= 30, 'spider is small and fragile');
+  assert(!getEnemyMeleeCfg('spider') && !sp.fly, 'spider is a contact crawler');
+  for (const [name, over] of [
+    ['standing', {}],
+    ['crouch', { ducking: true, h: PLAYER_BODY.duckH }],
+    ['jump', { onGround: false, attackAir: true, y: GROUND_Y - 20 }],
+  ]) {
+    const spider = mk('spider', 560);
+    const r = resolveMeleeHits(knight(over), [spider], stats, PLAYER_SWORD);
+    assert(r.hitAny && spider.hp < sp.hp, `spider is hit by a ${name} swing`);
+  }
+  const spider = mk('spider', 700);
+  for (let i = 0; i < 90; i++) aiUpdateEnemy(spider, 1 / 60, { x: 500, y: GROUND_Y }, floor, ENEMY_AI, phys);
+  assert(spider.x < 700 && spider.onGround, 'spider crawls toward the knight');
+
+  // Bog thing: slower and tankier than a skeleton, with a longer wind-up
+  const th = ENEMIES.thing;
+  assert(th.hp > ENEMIES.goblin.hp && th.speed < ENEMIES.goblin.speed, 'thing is slow and tanky');
+  assert(ENEMY_MELEE.thing.windup > ENEMY_MELEE.goblin.windup, 'thing telegraphs longer');
+
+  // Burning ghoul: more health and damage than a skeleton; the wind-up can be interrupted
+  const gh = ENEMIES.burning_ghoul;
+  assert(gh.hp > ENEMIES.goblin.hp && gh.damage > ENEMIES.goblin.damage, 'ghoul out-fights a skeleton');
+  const ghoul = mk('burning_ghoul', 540);
+  const target = { x: 500, y: GROUND_Y };
+  let hit = null;
+  for (let i = 0; i < 4; i++) hit = tickEnemySlam(ghoul, 0.016, target);
+  assertEq(ghoul.slamState, 'windup', 'ghoul winds up in range');
+  assert(!hit, 'no damage during the wind-up');
+  const r = resolveMeleeHits(knight(), [ghoul], stats, PLAYER_SWORD);
+  assert(r.hitAny, 'sword reaches the winding-up ghoul');
+  assertEq(ghoul.slamState, 'idle', 'a hit interrupts the ghoul wind-up');
+  ghoul.hitStun = 0;
+  for (let i = 0; i < 20; i++) hit = tickEnemySlam(ghoul, 0.016, target) || hit;
+  assert(!hit && ghoul.slamState === 'idle', 'interrupted ghoul waits out its cooldown');
+  let swung = null;
+  for (let i = 0; i < 120 && !swung; i++) swung = tickEnemySlam(ghoul, 0.016, target);
+  assert(swung && swung.hit && swung.damage >= gh.damage, 'uninterrupted ghoul swing hits');
+
+  // Hell hound: faster and tougher than a wolf; leaps only from close range, not endlessly
+  const hh = ENEMIES.hell_hound, lcfg = ENEMY_LUNGE.hell_hound;
+  assert(hh.hp > ENEMIES.wolf.hp && hh.speed > ENEMIES.wolf.speed && hh.lunges, 'hound beats a wolf');
+  const wide = [{ x: -5000, y: GROUND_Y, w: 9000, h: 40, ground: true }];
+  const run = (hound, player, frames, onTick) => {
+    for (let i = 0; i < frames; i++) {
+      aiUpdateEnemy(hound, 1 / 60, player, wide, hound.aiCfg || ENEMY_AI, phys);
+      if (onTick) onTick(i);
+    }
+  };
+  const far = mk('hell_hound', 1000);
+  run(far, { x: 500, y: GROUND_Y }, 20);
+  assertEq(far.lungeState, 'idle', 'hound far away does not lunge');
+  const high = mk('hell_hound', 600);
+  run(high, { x: 520, y: GROUND_Y - 200 }, 20);
+  assertEq(high.lungeState, 'idle', 'hound does not lunge at a knight on another level');
+
+  const hound = mk('hell_hound', 650, { aiCfg: { ...ENEMY_AI, aggroX: hh.aggroX } });
+  const mark = { x: 500, y: GROUND_Y };
+  run(hound, mark, 2);
+  assertEq(hound.lungeState, 'crouch', 'hound crouches when the knight is in range');
+  assertEq(hound.vx, 0, 'hound stands still while it crouches');
+  run(hound, mark, Math.ceil(lcfg.crouch * 60) + 1);
+  assertEq(hound.lungeState, 'leap', 'then springs');
+  assertEq(Math.sign(hound.vx), -1, 'toward the knight');
+  assert(hound.vy < 0 && !hound.onGround, 'leaving the ground');
+  const startX = hound.x;
+  let landed = false;
+  run(hound, mark, 90, () => { if (hound.lungeState !== 'leap') landed = true; });
+  assert(landed && hound.onGround, 'the leap ends on the ground');
+  assert(startX - hound.x > 60 && startX - hound.x < 180, 'a short committed lunge');
+  const starts = [];
+  const chained = mk('hell_hound', 650, { aiCfg: { ...ENEMY_AI, aggroX: hh.aggroX } });
+  let prev = 'idle';
+  run(chained, mark, 60 * 8, (i) => {
+    // The knight keeps stepping back into range
+    mark.x = chained.x - 140;
+    if (chained.lungeState === 'leap' && prev !== 'leap') starts.push(i / 60);
+    prev = chained.lungeState;
+  });
+  assert(starts.length >= 2, 'hound leaps again after a pause');
+  for (let i = 1; i < starts.length; i++) {
+    assert(starts[i] - starts[i - 1] > lcfg.recover + lcfg.cooldown, 'lunges are spaced by recovery plus cooldown');
+  }
+
+  const hit1 = mk('hell_hound', 650, { aiCfg: { ...ENEMY_AI, aggroX: hh.aggroX } });
+  run(hit1, { x: 520, y: GROUND_Y }, 2);
+  assertEq(hit1.lungeState, 'crouch', 'second hound crouches');
+  const r2 = resolveMeleeHits(knight({ x: 580, facing: 1 }), [hit1], stats, PLAYER_SWORD);
+  assert(r2.hitAny, 'sword hits a crouching hound');
+  run(hit1, { x: 520, y: GROUND_Y }, 2);
+  assertEq(hit1.lungeState, 'idle', 'a hit cancels the crouch');
+
+  // Session: spawned hound carries the lunge flag and faces the way its art does
+  const s = createSession();
+  s.loadLevel('forge-ruins');
+  const dog = s.spawnEnemy('hell_hound', { x: s.player.x + 400, y: s.player.y });
+  assert(dog && dog.lunges && dog.lungeState === 'idle', 'spawned hound can lunge');
+  assert(!s.spawnEnemy('spider', { x: s.player.x + 400, y: s.player.y }).hasMelee, 'spider has no melee');
+  assert(s.spawnEnemy('burning_ghoul', { x: s.player.x + 400, y: s.player.y }).hasMelee, 'ghoul swings');
+}
+
+section('enemy projectiles: flight, hits, walls, sword, clearing');
+{
+  const proj = await import(js('js/domain/projectiles.js'));
+  const { makeProjectile, tickProjectiles, cutProjectiles } = proj;
+  const body = { x: 480, y: 400, w: 26, h: 70 };
+  const open = { solids: [], bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 800 }, target: body, canHurt: true };
+  const shot = (o = {}) => makeProjectile('fireball', { x: 300, y: 440, vx: 260, damage: 16, owner: 'wizard', ...o });
+
+  // Flies straight, hits the knight once and is gone
+  let list = [shot()];
+  tickProjectiles(list, 0.5, { ...open, target: null });
+  assert(Math.abs(list[0].x - 430) < 0.01 && list[0].y === 440, 'projectile moves along its velocity');
+  let ev = tickProjectiles(list, 0.5, open);
+  assertEq(ev.length, 1, 'one event');
+  assertEq(ev[0].type, 'hit', 'it hits the knight');
+  assertEq(list.length, 0, 'and despawns');
+  assertEq(tickProjectiles(list, 0.5, open).length, 0, 'no second hit');
+
+  // I-frames: it flies through a knight who cannot be hurt
+  list = [shot({ x: 470 })];
+  ev = tickProjectiles(list, 0.05, { ...open, canHurt: false });
+  assert(list.length === 1 && ev.length === 0, 'a knight in i-frames is passed through');
+
+  // A fast shot cannot skip a thin wall
+  list = [shot({ vx: 4000 })];
+  ev = tickProjectiles(list, 0.1, { ...open, target: null, solids: [{ x: 350, y: 380, w: 6, h: 100 }] });
+  assertEq(ev[0] && ev[0].type, 'wall', 'a solid tile stops it');
+  list = [shot({ vx: -300, x: 100 })];
+  ev = tickProjectiles(list, 1, { ...open, target: null });
+  assertEq(ev[0] && ev[0].type, 'out', 'leaving the stage bounds removes it');
+  list = [shot({ vx: 0, y: 600 })];
+  list[0].life = 0.2;
+  ev = tickProjectiles(list, 0.3, { ...open, target: null });
+  assertEq(ev[0] && ev[0].type, 'expired', 'it expires after its lifetime');
+
+  // Sword
+  list = [shot({ x: 500 }), shot({ x: 900 })];
+  const cut = cutProjectiles(list, { x: 470, y: 410, w: 84, h: 52 });
+  assert(cut.length === 1 && list.length === 1 && list[0].x === 900, 'the sword box cuts only the shots it touches');
+
+  // Session: hurts the knight once, scaled by NG+, respects i-frames, sword destroys it, cleared on retry
+  const s = createSession();
+  s.loadLevel('iron-caverns');
+  const p = s.player;
+  const put = (o) => s.projectiles.push(shot({ x: p.x - 60, y: p.y - 40, vx: 200, ...o }));
+  p.hp = p.maxHp = 100; p.inv = 0;
+  put();
+  for (let i = 0; i < 40; i++) s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(p.hp, 84, 'a fireball costs its damage');
+  assertEq(s.projectiles.length, 0, 'and is used up');
+  assert(p.inv > 0, 'the hit starts i-frames');
+  p.inv = 5; p.hp = 100;
+  put({ x: p.x - 10 });
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(p.hp, 100, 'no damage during i-frames');
+  s.projectiles.length = 0;
+
+  p.inv = 0; p.facing = 1;
+  put({ x: p.x + 50, vx: -200 });
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: true });
+  assertEq(s.projectiles.length, 0, 'the sword destroys a fireball');
+  assertEq(p.hp, 100, 'and it does no damage');
+
+  put({ x: p.x + 500 });
+  s.loadLevel('iron-caverns');
+  assertEq(s.projectiles.length, 0, 'retry clears projectiles');
+  put({ x: s.player.x + 500 });
+  s.endRun('test');
+  assertEq(s.projectiles.length, 0, 'death clears projectiles');
+  s.loadLevel('iron-caverns');
+  s.meta.ngPlus = 2;
+  const w = s.spawnEnemy('wizard', { x: s.player.x + 400, y: s.player.y });
+  assertEq(w.damage, Math.round(config.ENEMIES.wizard.damage * rpg.ngPlusDamageMul(s.meta, config.NG_PLUS)), 'NG+ scales wizard damage');
+  assert(w.damage > config.ENEMIES.wizard.damage, 'NG+ wizard hits harder');
+}
+
+section('wizard: stays back, telegraphed interruptible cast, cooldown');
+{
+  const { ENEMIES, ENEMY_CAST } = config;
+  const cfg = ENEMY_CAST.wizard;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const floor = [{ x: 0, y: GROUND_Y, w: 4000, h: 40, ground: true }];
+  const mkW = (x, extra = {}) => ({
+    type: 'wizard', x, y: GROUND_Y, w: ENEMIES.wizard.w, h: ENEMIES.wizard.h, hp: ENEMIES.wizard.hp,
+    speed: ENEMIES.wizard.speed, damage: ENEMIES.wizard.damage, vx: 0, vy: 0, onGround: true,
+    facing: -1, homeX: x, homeY: GROUND_Y, patrolMin: x - 300, patrolMax: x + 300,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, casts: true, castState: 'idle', castT: 0, castCd: 0,
+    slamState: 'idle', slamT: 0, slamCd: 0, ...extra,
+  });
+  const kn = (x, y = GROUND_Y) => ({ x, y, w: PLAYER_BODY.w, h: PLAYER_BODY.h });
+  const tickW = (e, k, n) => {
+    const shots = [];
+    for (let i = 0; i < n; i++) {
+      aiUpdateEnemy(e, 1 / 60, k, floor, ENEMY_AI, phys);
+      if (e.shot) { shots.push({ t: i / 60, p: e.shot }); e.shot = null; }
+    }
+    return shots;
+  };
+  assert(ENEMIES.wizard.hp <= ENEMIES.goblin.hp && cfg.windup >= 0.5 && cfg.cooldown >= 2, 'fragile, readable, slow to repeat');
+
+  // Casts only inside range and on the knight's level
+  const far = mkW(1000);
+  tickW(far, kn(1000 - cfg.range - 60), 30);
+  assertEq(far.castState, 'idle', 'out of range: no cast');
+  const high = mkW(1000);
+  tickW(high, kn(800, GROUND_Y - 300), 30);
+  assertEq(high.castState, 'idle', 'knight on another level: no cast');
+  const near = mkW(1000);
+  tickW(near, kn(800), 5);
+  assertEq(near.castState, 'windup', 'knight in range: it winds up');
+  assertEq(near.facing, -1, 'facing the knight');
+
+  // The wind-up takes cfg.windup, then one fireball flies toward the knight
+  const a = mkW(1000);
+  const shots = tickW(a, kn(800), 60 * 3);
+  assert(shots.length >= 1, 'it fires');
+  assert(Math.abs(shots[0].t - cfg.windup) < 0.1, 'after the telegraph');
+  assert(shots[0].p.vx < 0 && shots[0].p.vy === 0, 'horizontally toward the knight');
+  assert(shots[0].p.damage === ENEMIES.wizard.damage && shots[0].p.owner === 'wizard', 'carries its damage');
+  for (let i = 1; i < shots.length; i++) assert(shots[i].t - shots[i - 1].t >= 2, 'casts are at least 2s apart');
+
+  // A hit interrupts the wind-up, and it holds off before trying again
+  const b = mkW(1000);
+  tickW(b, kn(800), 20);
+  assertEq(b.castState, 'windup', 'second wizard winds up');
+  b.hitStun = 0.2;
+  const afterHit = tickW(b, kn(800), 20);
+  assertEq(afterHit.length, 0, 'a hit cancels the cast');
+  assertEq(b.castState, 'idle', 'back to idle');
+  assert(b.castCd > 0.3, 'with a pause');
+
+  // Keeps its distance: steps back when the knight is close, never closes into melee
+  const c = mkW(1000, { castCd: 5 });
+  tickW(c, kn(1000 - 80), 40);
+  assert(c.x > 1000, 'steps back from a close knight');
+  const d = mkW(1000, { castCd: 99 });
+  const stand = kn(1000 - 300);
+  tickW(d, stand, 60 * 5);
+  assert(Math.abs(d.x - stand.x) >= cfg.retreat - 5, 'does not chase into melee');
+  const e2 = mkW(1000, { castCd: 99 });
+  tickW(e2, kn(1000 - 480), 60);
+  assert(e2.x < 1000, 'steps in when the knight is farther than its range');
+
+  // Session: spawned wizard casts a live projectile
+  const s = createSession();
+  s.loadLevel('iron-caverns');
+  s.player.hp = s.player.maxHp = 9999;
+  const w = s.spawnEnemy('wizard', { x: s.player.x + 300, y: s.player.y });
+  assert(w && w.casts, 'spawned wizard can cast');
+  w.rise = 0; w.spawnGrace = 0;
+  for (let i = 0; i < 60 * 2 && !s.projectiles.length; i++) s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assert(s.projectiles.length === 1 && s.projectiles[0].owner === 'wizard', 'wizard puts a fireball in the session');
+}
+
+section('fire skull: hovers, telegraphs, dives on a locked line, returns');
+{
+  const { ENEMIES, ENEMY_SWOOP } = config;
+  const cfg = ENEMY_SWOOP.fire_skull;
+  const phys = { gravity: PLAYER_MOVE.gravity, maxFall: PLAYER_MOVE.maxFall };
+  const mkS = (x, y, extra = {}) => ({
+    type: 'fire_skull', x, y, w: ENEMIES.fire_skull.w, h: ENEMIES.fire_skull.h, hp: ENEMIES.fire_skull.hp,
+    speed: ENEMIES.fire_skull.speed, damage: ENEMIES.fire_skull.damage, vx: 0, vy: 0, onGround: false,
+    facing: -1, homeX: x, homeY: y, patrolMin: x - 200, patrolMax: x + 200, fly: true, swoops: true,
+    hitStun: 0, flash: 0, phase: 0, spawnGrace: 0, swoopState: 'hover', swoopT: 0, swoopCd: 0,
+    slamState: 'idle', slamT: 0, slamCd: 0, ...extra,
+  });
+  const k = { x: 700, y: GROUND_Y, w: PLAYER_BODY.w, h: PLAYER_BODY.h };
+  const run = (e, kn, n, fn) => {
+    for (let i = 0; i < n; i++) { aiUpdateEnemy(e, 1 / 60, kn, [], ENEMY_AI, phys); if (fn) fn(i); }
+  };
+  assert(!config.getEnemyMeleeCfg('fire_skull') && ENEMIES.fire_skull.fly, 'a contact flier');
+
+  const e = mkS(900, GROUND_Y - 160);
+  run(e, k, 10);
+  assert(e.y < GROUND_Y - 90 && e.swoopState !== 'dash', 'hovers above the knight');
+  const far = mkS(2500, GROUND_Y - 160);
+  run(far, k, 90);
+  assertEq(far.swoopState, 'hover', 'far from the knight it keeps hovering');
+
+  // Wind-up, then a dash whose direction is fixed when it starts
+  const sk = mkS(780, GROUND_Y - 160);
+  let guard = 0;
+  while (sk.swoopState === 'hover' && guard++ < 600) run(sk, k, 1);
+  assertEq(sk.swoopState, 'windup', 'it ignites first');
+  const t0 = guard / 60;
+  guard = 0;
+  while (sk.swoopState === 'windup' && guard++ < 600) run(sk, k, 1);
+  assert(guard / 60 >= cfg.windup - 0.05, 'the warning lasts the full wind-up');
+  assertEq(sk.swoopState, 'dash', 'then it dives');
+  const dir0 = { ...sk.swoopDir };
+  assert(dir0.x < 0 && dir0.y > 0, 'toward the knight (down and left)');
+  const kMoved = { ...k, x: 1500 };
+  const x0 = sk.x;
+  run(sk, kMoved, 6);
+  assert(sk.swoopDir.x === dir0.x && sk.swoopDir.y === dir0.y, 'dash direction does not change');
+  assert(sk.x < x0 && sk.vx < 0, 'it keeps going the locked way even if the knight leaves');
+  run(sk, kMoved, 120);
+  assertEq(sk.swoopState === 'dash', false, 'the dash ends');
+  assert(sk.y <= k.y - 8 + sk.h / 2 + 1, 'never dives below the knight\'s feet');
+  // It drifts back up to hover (the knight has left, so it does not dive again)
+  const low = sk.y;
+  run(sk, kMoved, 60 * 2);
+  assertEq(sk.swoopState, 'hover', 'drifts back to hover');
+  assert(sk.y < low, 'and rises');
+  const gap = mkS(780, GROUND_Y - 160);
+  const dives = [];
+  let prev = 'hover';
+  for (let i = 0; i < 60 * 10; i++) {
+    run(gap, k, 1);
+    if (gap.swoopState === 'dash' && prev !== 'dash') dives.push(i / 60);
+    prev = gap.swoopState;
+  }
+  assert(dives.length >= 2, 'it dives repeatedly');
+  for (let i = 1; i < dives.length; i++) assert(dives[i] - dives[i - 1] >= cfg.cooldown, 'dives are spaced by the cooldown');
+
+  // A hit cancels the wind-up
+  const h = mkS(780, GROUND_Y - 160);
+  guard = 0;
+  while (h.swoopState !== 'windup' && guard++ < 600) run(h, k, 1);
+  h.hitStun = 0.2;
+  run(h, k, 3);
+  assertEq(h.swoopState, 'hover', 'a hit cancels the wind-up');
+
+  // Session: contact damage on the dive
+  const s = createSession();
+  s.loadLevel('iron-caverns');
+  const sp = s.spawnEnemy('fire_skull', { x: s.player.x + 300, y: s.player.y - 150 });
+  assert(sp && sp.swoops && sp.fly, 'spawned skull swoops');
 }
 
 console.log(`\n\n${passed} passed, ${failed} failed`);
