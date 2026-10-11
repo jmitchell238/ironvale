@@ -266,7 +266,7 @@ export class GameSession {
     this.audio.gameOver();
     this.projectiles.length = 0;
     this.persistMeta();
-    this.save.recordGameEnd(this.score, this.wave, this.kills);
+    this.save.recordGameEnd(Math.floor(this.score), this.wave, this.kills);
     if (this.player) {
       this.burst(playerCx(this.player), playerCy(this.player), '#c9a227', 24, 160);
     }
@@ -293,7 +293,7 @@ export class GameSession {
     }
     this.persistMeta();
     this.audio.levelUp();
-    this.save.recordGameEnd(this.score, this.wave, this.kills);
+    this.save.recordGameEnd(Math.floor(this.score), this.wave, this.kills);
     if (this.player) {
       this.burst(playerCx(this.player), playerCy(this.player), '#c9a227', 28, 180);
     }
@@ -416,6 +416,12 @@ export class GameSession {
    */
   update(dt, input) {
     if (this.screen !== 'play') return;
+
+    // A held jump key is one press: it must not refill the jump buffer every frame (that spent the double jump at takeoff).
+    const jumpDown = !!input.jump;
+    const jumpEdge = jumpDown && !this._jumpWasDown;
+    this._jumpWasDown = jumpDown;
+    input = { ...input, jump: jumpEdge };
 
     // Hitstop freezes gameplay briefly (juice)
     if (this.hitstop > 0) {

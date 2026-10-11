@@ -666,6 +666,36 @@ section('checkpoints continue');
   assertEq(s.player.x, cp.x, 'spawn at checkpoint');
 }
 
+section('continue keeps the furthest checkpoint');
+{
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  const cps = s.level.checkpoints.slice().sort((a, b) => a.x - b.x);
+  const last = cps[cps.length - 1];
+  for (const enc of s.level.encounters) s.firedEncounters.add(enc.id);
+  s.enemies.length = 0;
+  s.player.x = last.x + 5;
+  s.updateLevelProgress();
+  assertEq(s.activeCheckpoint.id, last.id, 'furthest checkpoint reached');
+  s.hurtPlayer(99999);
+  assert(s.continueFromCheckpoint(), 'continue');
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assertEq(s.activeCheckpoint.id, last.id, 'earlier flags do not take over after a continue');
+  s.player.inv = 0;
+  s.hurtPlayer(99999);
+  assert(s.continueFromCheckpoint(), 'continue again');
+  assertEq(s.player.x, last.x, 'second continue is still at the furthest checkpoint');
+}
+
+section('best score is a whole number');
+{
+  const s = createSession();
+  s.loadLevel('forgegate-fields');
+  s.score = 148.94536;
+  s.hurtPlayer(99999);
+  assertEq(s.save.data.best, 148, 'best score recorded without decimals');
+}
+
 section('feel: duck + double jump + safe spawn');
 {
   const s = createSession();
@@ -693,6 +723,28 @@ section('feel: duck + double jump + safe spawn');
   e.slamCd = 0;
   for (let i = 0; i < 4; i++) s.updateEnemy(e, 0.02);
   assertEq(e.slamState, 'idle', 'no instant attack in grace');
+}
+
+section('a held jump key is one press: the double jump survives takeoff');
+{
+  for (const mode of ['jump', 'up']) {
+    const s = createSession();
+    s.loadLevel('forgegate-fields');
+    s.enemies.length = 0;
+    const p = s.player;
+    p.hp = p.maxHp = 9999;
+    const idle = { x: 0, y: 0, jump: false, attack: false };
+    for (let i = 0; i < 10; i++) s.update(1 / 60, idle);
+    const held = mode === 'jump' ? { x: 0, y: 0, jump: true, attack: false } : { x: 0, y: -1, jump: false, attack: false };
+    s.setJumpHeld(true);
+    for (let i = 0; i < 8; i++) s.update(1 / 60, held);
+    assert(!p.onGround, `${mode}: left the ground`);
+    assertEq(p.airJumps, 1, `${mode}: holding the key does not spend the double jump`);
+    s.update(1 / 60, idle); // release, then press again in the air
+    s.setJumpHeld(true);
+    s.update(1 / 60, held);
+    assertEq(p.airJumps, 0, `${mode}: a second press double-jumps`);
+  }
 }
 
 section('New Game+ + juice hitstop');
@@ -1408,6 +1460,55 @@ for (const B of BOSS_STAGES) {
   assert(s.screen === 'allocate' || s.screen === 'clear', 'the stage clears when the boss falls');
 }
 
+// Dying in a boss arena offers Continue from the checkpoint before the gate (all four stages).
+for (const id of ['forgegate-fields', 'forest-ramparts', 'forge-ruins', 'iron-caverns']) {
+  const L = levels.getLevelById(id);
+  const b = L.boss;
+  const cp = L.checkpoints[L.checkpoints.length - 1];
+  section(`${L.name}: death in the boss arena continues at the gate checkpoint`);
+  const s = createSession();
+  s.loadLevel(id);
+  for (const enc of L.encounters) s.firedEncounters.add(enc.id);
+  s.enemies.length = 0;
+  s.player.x = cp.x + 5;
+  s.player.y = cp.y;
+  s.updateLevelProgress();
+  assertEq(s.activeCheckpoint.id, cp.id, 'gate checkpoint reached');
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 'in the arena');
+  assertEq(s.activeCheckpoint && s.activeCheckpoint.id, cp.id, 'checkpoint kept in the arena');
+  s.hurtPlayer(99999);
+  assertEq(s.screen, 'over', 'dead');
+  assert(s.hasContinueCheckpoint(), 'Continue is offered after a boss death');
+  assert(s.continueFromCheckpoint(), 'continue loads');
+  assertEq(s.screen, 'play', 'back in play');
+  assertEq(s.player.x, cp.x, 'knight at the gate checkpoint');
+  assertEq(s.player.hp, s.player.maxHp, 'hearts as on any continue');
+  assertEq(s.levelPhase, 'explore', 'explore phase');
+  assert(!s.bossSpawned && !s.arena, 'no arena yet');
+  assert(!s.enemies.some(e => e.isBoss), 'boss not spawned yet');
+  assertEq(s.enemies.length, 0, 'cleared enemies stay dead');
+  assertEq(s.projectiles.length, 0, 'projectiles cleared');
+  assert(s.isGateOpen(), 'gate open for re-entry');
+  s.update(1 / 60, { x: 0, y: 0, jump: false, attack: false });
+  assert(!s.enemies.some(e => e.isBoss), 'still no boss while standing at the checkpoint');
+  s.player.x = L.gateX + 10;
+  s.updateLevelProgress();
+  assertEq(s.levelPhase, 'boss', 're-entered the arena');
+  const boss = s.enemies.find(e => e.isBoss);
+  assert(boss && boss.type === b.type, 'boss spawns again');
+  assertEq(s.enemies.filter(e => e.isBoss).length, 1, 'exactly one boss');
+  assertEq(boss.hp, boss.maxHp, 'boss at full HP');
+  assert(!s.isGateOpen(), 'gate closed behind the knight');
+  // Die again, then Retry restarts the stage
+  s.hurtPlayer(99999);
+  s.startRun(id);
+  assertEq(s.player.x, L.spawn.x, 'retry restarts at the stage start');
+  assertEq(s.levelPhase, 'explore', 'retry explore');
+  assertEq(s.firedEncounters.size, 0, 'retry resets the fights');
+}
+
 // --- Nightmare ---------------------------------------------------------------
 section('Nightmare: telegraphed charge, run-up, skid, recovery, enrage');
 {
@@ -1430,6 +1531,15 @@ section('Nightmare: telegraphed charge, run-up, skid, recovery, enrage');
   };
   assert(enemyUsesTelegraphedAttack(mk(100)) && !config.getEnemyMeleeCfg('nightmare'), 'it hurts only through its charge, not by contact');
   assert(ENEMIES.nightmare.h < PLAYER_MOVE.jumpVel ** 2 / (2 * PLAYER_MOVE.gravity), 'its hitbox is lower than a single jump\'s peak');
+
+  // A knight standing against the end wall is still hit: the slide at the end of the charge reaches it
+  {
+    const wallKnight = kn(40);
+    const eW = mk(500, { bossState: 'windup', bossMove: 'charge', bossT: 0.05, facing: -1 });
+    let wallHits = 0;
+    run(eW, wallKnight, 60 * 3, (i, hit) => { if (hit && hit.hit) wallHits++; });
+    assertEq(wallHits, 1, 'a knight hugging the wall is hit once by the charge');
+  }
 
   // One full cycle, in order, with the warning held for the full wind-up
   const e = mk(1800);

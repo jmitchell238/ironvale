@@ -450,6 +450,11 @@ export function tickEnemyCharge(e, dt, player, cfg) {
     e.facing = e.chargeDir;
     e.bossT -= dt;
     e.vx = e.chargeDir * e.skidV * Math.max(0, e.bossT / e.skidDur);
+    // A knight standing near the end wall is reached while the horse is still sliding, so the slide hurts too.
+    if (!e.chargeHitDone && Math.abs(e.vx) > 60 && bodiesOverlap(e, player)) {
+      e.chargeHitDone = true;
+      hit = { hit: true, damage: e.damage, knockback: cfg.knockback, dir: e.chargeDir };
+    }
     if (e.bossT <= 0) {
       e.vx = 0;
       e.bossState = 'recover';

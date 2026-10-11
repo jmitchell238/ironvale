@@ -80,7 +80,7 @@ Leveling up during a stage only banks a point. Points are spent on the `allocate
 
 ## Stages
 
-Stages are plain objects in `js/domain/levels.js`. Each has bounds, a spawn point, platforms, ladders, encounters, checkpoints, a gate, and optionally a boss. An encounter is a trigger X position plus a list of enemies to spawn when the player passes it. The gate opens once every encounter has fired and no enemies are left. On a stage with a boss, the boss spawns in an arena past the gate.
+Stages are plain objects in `js/domain/levels.js`. Each has bounds, a spawn point, platforms, ladders, encounters, checkpoints, a gate, and optionally a boss. An encounter is a trigger X position plus a list of enemies to spawn when the player passes it. The gate opens once every encounter has fired and no enemies are left. On a stage with a boss, the boss spawns in an arena past the gate. The checkpoint stays active inside the arena, so dying there continues at the checkpoint before the gate: the stage reloads in `explore` with the fights already fired, the boss is not spawned until the knight walks through the gate again, and it comes back at full health.
 
 All four stages (Forgegate Fields, Forest Ramparts, Forge Ruins and Iron Caverns) are tile-map stages. Each is drawn on a 32 px grid with a few builder calls (`groundCells`, `fillCells`, ladders, coins, stamps), and `compileTileMap()` turns the grid into:
 

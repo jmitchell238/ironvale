@@ -115,7 +115,10 @@ export function integratePlayerMovement(dt, input, ctx) {
   }
   p.climbing = false;
 
-  if (wantJump || (iy < -0.55 && !ladder)) jumpBuffered = PLAYER_MOVE.jumpBuffer;
+  // Up counts as a jump press only when it is pressed, not while it stays held
+  const upKick = iy < -0.55 && !ladder;
+  if (wantJump || (upKick && !p.upKick)) jumpBuffered = PLAYER_MOVE.jumpBuffer;
+  p.upKick = upKick;
 
   // ── Duck (ground only; hold down) ──
   const wantDuck = p.onGround && iy >= duckThresh && !p.climbing

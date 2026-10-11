@@ -313,7 +313,7 @@ const input = createInput(stage, cv, {
     }
     if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
       e.preventDefault();
-      session.requestJump();
+      if (!e.repeat) session.requestJump(); // key auto-repeat is not a second press
       session.setJumpHeld(true);
     }
     if (e.key === 'j' || e.key === 'J' || e.key === 'k' || e.key === 'K' || e.key === 'f' || e.key === 'F' || e.key === 'Shift') {

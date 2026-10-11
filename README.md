@@ -22,7 +22,7 @@ You can install it as an app from the browser (Add to Home Screen on iPhone and 
 
 ## How it plays
 
-Each stage is a side-scrolling level with cliffs, ladders, bridges and floating islands. Enemies appear as you go; skeletons climb out of the ground. The gate at the end stays shut until every enemy in the stage is beaten. Past it is a walled boss arena: the gate closes behind you, the screen stops scrolling, and the stage is cleared when the boss falls. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage. Falling into the sea costs a heart and puts you back on the last solid ground.
+Each stage is a side-scrolling level with cliffs, ladders, bridges and floating islands. Enemies appear as you go; skeletons climb out of the ground. The gate at the end stays shut until every enemy in the stage is beaten. Past it is a walled boss arena: the gate closes behind you, the screen stops scrolling, and the stage is cleared when the boss falls. Walking past a flag sets a checkpoint, and if you die you can continue from it or retry the stage. Dying in a boss arena continues from the flag just before the gate; the boss comes back at full health when you walk in again. Falling into the sea costs a heart and puts you back on the last solid ground.
 
 - The sword chains: keep pressing and the third hit of a chain does extra damage. A hit stops an enemy's wind-up.
 - Skeletons wind up before they swing, so you can see attacks coming.

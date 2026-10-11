@@ -117,8 +117,7 @@ export function enterBossArena(session) {
   const b = session.level.boss;
   session.bossSpawned = true;
   session.levelPhase = 'boss';
-  // Boss run has no mid-arena continue
-  session.activeCheckpoint = null;
+  // activeCheckpoint stays: dying in the arena continues from the checkpoint before the gate
   session.arena = { minX: b.arenaMinX, maxX: b.arenaMaxX };
   if (b.camY != null) session.arena.camY = b.camY; // a flier's arena holds the camera up so she stays in view
   const bossType = b.type || 'boss';
@@ -219,6 +218,10 @@ export function loadLevelIntoSession(session, levelId, opts = {}) {
       firedIds: [...resume.firedIds],
     };
     session.reachedCheckpoints.add(resume.id);
+    // Flags behind the resume point count as reached, so walking on never moves the continue point back to one of them
+    for (const cp of listCheckpoints(def)) {
+      if (cp.x <= resume.x) session.reachedCheckpoints.add(cp.id);
+    }
     // Soft invuln after continue
     session.player.inv = 1.2;
   }
@@ -232,7 +235,7 @@ export function loadLevelIntoSession(session, levelId, opts = {}) {
  * @param {import('../GameSession.js').GameSession} session
  */
 export function stashDeathCheckpoint(session) {
-  if (!session.level || !session.activeCheckpoint || session.levelPhase === 'boss') {
+  if (!session.level || !session.activeCheckpoint) {
     session.lastDeathCheckpoint = null;
     return;
   }
