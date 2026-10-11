@@ -2162,6 +2162,38 @@ section('Angel: in a session she dives, lands, and the sword hurts her');
   assertEq(p.hp, hp1, 'touching her while she rests is safe');
 }
 
+section('keyboard: a key released under Shift or after losing focus does not stick');
+{
+  const winHandlers = {};
+  const prevAdd = globalThis.addEventListener;
+  globalThis.addEventListener = (type, fn) => { (winHandlers[type] ||= []).push(fn); };
+  const { createInput } = await import(js('js/adapters/input.js'));
+  const el = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }) };
+  const input = createInput(el, el, {});
+  const fire = (type, key) => winHandlers[type].forEach(fn => fn({ key, preventDefault() {} }));
+
+  // Hold D, press Shift to attack, let go of D (the browser reports 'D'), let go of Shift
+  fire('keydown', 'd');
+  fire('keydown', 'Shift');
+  fire('keyup', 'D');
+  fire('keyup', 'Shift');
+  assertEq(input.poll().x, 0, 'D let go while Shift is held stops the run');
+  fire('keydown', 'a');
+  assertEq(input.poll().x, -1, 'A then runs left');
+  fire('keyup', 'a');
+
+  // Caps Lock: 'D' down, 'd' up
+  fire('keydown', 'D');
+  fire('keyup', 'd');
+  assertEq(input.poll().x, 0, 'Caps Lock does not leave D stuck');
+
+  // Window loses focus while D is held; its keyup never arrives
+  fire('keydown', 'd');
+  fire('blur');
+  assertEq(input.poll().x, 0, 'losing focus releases held keys');
+  globalThis.addEventListener = prevAdd;
+}
+
 
 console.log(`\n\n${passed} passed, ${failed} failed`);
 if (failed) {

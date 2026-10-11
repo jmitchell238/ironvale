@@ -170,15 +170,24 @@ export function createInput(stageEl, canvasEl, hooks) {
   stageEl.addEventListener('pointerup', onPointerUp, ptrOpts);
   stageEl.addEventListener('pointercancel', () => resetStick(), ptrOpts);
 
+  // Letters are stored lower-case: with Shift (an attack key) or Caps Lock held,
+  // 'd' can go down and 'D' come up, which would leave 'd' stuck down.
+  const keyName = key => (key.length === 1 ? key.toLowerCase() : key);
+
   addEventListener('keydown', e => {
-    keys[e.key] = true;
+    keys[keyName(e.key)] = true;
     if (hooks.onKeyDown) hooks.onKeyDown(e, keys);
   });
   addEventListener('keyup', e => {
-    keys[e.key] = false;
+    keys[keyName(e.key)] = false;
     if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
       if (hooks.onJumpHeld) hooks.onJumpHeld(false);
     }
+  });
+  // A key released while the window is in the background never sends keyup
+  addEventListener('blur', () => {
+    for (const k of Object.keys(keys)) keys[k] = false;
+    if (hooks.onJumpHeld) hooks.onJumpHeld(false);
   });
 
   return {
